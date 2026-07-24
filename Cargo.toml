@@ -8,5 +8,6 @@ members = [
     "soma-cli",
     "soma-protocol",
     "soma-client",
+    "soma-runtime",
 ]
 resolver = "2"

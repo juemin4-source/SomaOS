@@ -34,7 +34,19 @@ pub struct RunStartParams {
 pub struct RunStartResult {
     pub run_id: String,
     pub case_id: String,
-    pub status: String,  // "accepted"
+    pub status: RunStatus,
+}
+
+/// Run 状态（与 core::run::RunStatus 语义一致，但独立定义以维持编译期隔离）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RunStatus {
+    Accepted,
+    Running,
+    Yielded,
+    Completed,
+    Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,10 +55,10 @@ pub struct RunGetParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunStatus {
+pub struct RunStatusResult {
     pub run_id: String,
     pub case_id: String,
-    pub status: String,
+    pub status: RunStatus,
     pub started_at: String,
     pub finished_at: Option<String>,
     pub outcome: Option<String>,
@@ -60,5 +72,5 @@ pub struct RunCancelParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunCancelResult {
     pub run_id: String,
-    pub status: String,
+    pub status: RunStatus,
 }

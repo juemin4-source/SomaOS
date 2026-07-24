@@ -104,29 +104,29 @@ mod tests {
         let parsed: RunStartParams = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.input, "run it");
 
-        // RunStatus
-        let status = RunStatus {
+        // RunStatusResult
+        let status = RunStatusResult {
             run_id: "r-001".into(),
             case_id: "c-001".into(),
-            status: "completed".into(),
+            status: RunStatus::Completed,
             started_at: "2026-07-24T00:00:00Z".into(),
             finished_at: Some("2026-07-24T01:00:00Z".into()),
             outcome: Some("success".into()),
         };
         let json = serde_json::to_string(&status).unwrap();
-        let parsed: RunStatus = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.status, "completed");
+        let parsed: RunStatusResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.status, RunStatus::Completed);
         assert!(parsed.finished_at.is_some());
         assert!(parsed.outcome.is_some());
 
         // RunCancelResult
         let cancel = RunCancelResult {
             run_id: "r-001".into(),
-            status: "cancelled".into(),
+            status: RunStatus::Cancelled,
         };
         let json = serde_json::to_string(&cancel).unwrap();
         let parsed: RunCancelResult = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.status, "cancelled");
+        assert_eq!(parsed.status, RunStatus::Cancelled);
     }
 
     #[test]

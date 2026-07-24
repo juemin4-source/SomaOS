@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Run 生命周期通知
+/// Run 生命周期通知（结构化 payload 版本，用于客户端反序列化）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunNotification {
     pub case_id: String,

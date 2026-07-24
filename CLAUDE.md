@@ -18,44 +18,53 @@ SomaOS 不是一个"更强的 Coding Agent"。它是**一套允许 AI 获得不�
 ## 架构
 
 ```
-soma-cli
+soma-cli              ← 协议客户端（无 Core 依赖）
+   │
+   ├── soma-runtime   ← 独立子进程（组合根，包装 Core）
    │
    ▼
-soma-core         ← Ports: ModelProvider, CapabilityRuntime, CaseStore
+soma-core             ← Ports: ModelProvider, CapabilityRuntime, CaseStore
    │
-   ├── soma-model       ← 自有 ModelRequest/ModelEvent/ToolCall 类型
-   ├── soma-model-rig   ← Rig 适配器（边界 crate）
-   ├── soma-capability  ← CapabilityContract + Organ trait + 实现
-   └── soma-store       ← CaseStore trait + SQLite 实现
+   ├── soma-model       ← 自有类型
+   ├── soma-model-rig   ← Rig 适配器
+   ├── soma-capability  ← Organ trait + 实现
+   └── soma-store       ← CaseStore/RunStore + SQLite
+
+soma-protocol          ← 共享协议契约（JSON-RPC 类型）
+soma-client            ← 协议客户端（soma-runtime 的子进程传输层）
 ```
 
 ## 核心 crate
 
-| crate | 职责 |
-|-------|------|
-| `soma-cli` | CLI 入口，composition root |
-| `soma-core` | TurnEngine 状态机、EventEnvelope、Ports trait 定义 |
-| `soma-model` | Soma 自有模型交互类型 |
-| `soma-model-rig` | Rig Provider 适配器 |
-| `soma-capability` | 能力契约、Organ 实现（File/Process/Git） |
-| `soma-store` | 持久化接口与 SQLite 实现 |
+| crate | 职责 | 依赖规则 |
+|-------|------|---------|
+| `soma-cli` | CLI 入口，thin client | 只依赖 `soma-client` + `soma-protocol` ✅ |
+| `soma-runtime` | 独立子进程，composition root | 依赖全部 core crate |
+| `soma-core` | TurnEngine 状态机、EventEnvelope、Run 实体、Policy | |
+| `soma-model` | Soma 自有模型交互类型 | |
+| `soma-model-rig` | Rig Provider 适配器 | |
+| `soma-capability` | 能力契约、Organ 实现（File/Process/Git） | |
+| `soma-store` | 持久化接口（CaseStore + RunStore）与 SQLite | |
+| `soma-protocol` | JSON-RPC 协议类型（Request/Response/Notification + params） | 纯 serde，零内部依赖 |
+| `soma-client` | Runtime 子进程传输层 | 只依赖 `soma-protocol` + tokio |
 
 ## 里程碑
 
-- **M0**: TurnEngine 闭环 + EventEnvelope + CLI 最小可见原型 ✅
-- **M1**: CaseStore 持久化 + File/Process/Git Organ 🔄
-- **M2**: Permission 系统 + Action Trace
-- **M3**: Evidence + 验证失效
-- **M4**: 进程恢复 + 完整性验收
-- **M5**: Fixture QA + 证据绑定
+- **v0.1.0** — TurnEngine 闭环 + M1-M5 全部完成 ✅ tag `v0.1.0`
+- **v0.2 Phase 1** — 最小外部控制闭环 ✅
+  - Run 实体 + RunStore ✅
+  - soma-runtime crate（JSON-RPC over stdio）✅
+  - 真实 stdin/stdout transport ✅
+  - CLI 切割（无 Core 依赖）✅
 
 ## 命令
 
 ```powershell
-cargo build                    # 编译
-cargo test                     # 运行全部测试（当前 22 个）
-$env:ANTHROPIC_API_KEY="sk-ant-..."
+cargo build                    # 编译全部
+cargo test                     # 运行全部测试（当前 48 个）
+$env:DEEPSEEK_API_KEY="sk-..."  # 或 ANTHROPIC_API_KEY
 cargo run -- investigate "问题描述"
+cargo run -p soma-runtime -- --stdio  # 直接启动 runtime
 ```
 
 ## 不可违背的设计约束

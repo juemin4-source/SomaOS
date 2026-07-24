@@ -1,17 +1,11 @@
 [package]
 name = "soma-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde_json = "1"
-rand = "0.8"
-soma-core = { path = "../soma-core" }
-soma-model = { path = "../soma-model" }
-soma-model-rig = { path = "../soma-model-rig" }
-soma-capability = { path = "../soma-capability" }
-soma-store = { path = "../soma-store" }
+soma-client = { path = "../soma-client" }
+soma-protocol = { path = "../soma-protocol" }

@@ -2,6 +2,8 @@ use std::sync::Mutex;
 
 use rusqlite::{params, Connection, Result as SqlResult};
 
+use crate::run_store::RunRecord;
+use crate::run_store::RunStore;
 use crate::store::{CaseEvent, CaseStore};
 
 pub struct SqliteCaseStore {
@@ -40,15 +42,101 @@ impl SqliteCaseStore {
                 created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id       TEXT PRIMARY KEY,
+                case_id      TEXT NOT NULL,
+                submitted_by TEXT NOT NULL DEFAULT '',
+                status       TEXT NOT NULL DEFAULT 'ACCEPTED',
+                started_at   TEXT NOT NULL,
+                finished_at  TEXT,
+                outcome      TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS metadata (
                 key         TEXT PRIMARY KEY,
                 value       TEXT NOT NULL
             );
 
-            INSERT OR IGNORE INTO metadata (key, value) VALUES ('schema_version', '1');
+            INSERT OR IGNORE INTO metadata (key, value) VALUES ('schema_version', '2');
             INSERT OR IGNORE INTO metadata (key, value) VALUES ('store_type', 'soma-sqlite');",
         )?;
         Ok(())
+    }
+}
+
+impl RunStore for SqliteCaseStore {
+    fn insert_run(&self, run: &RunRecord) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO runs (run_id, case_id, submitted_by, status, started_at, finished_at, outcome) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![run.run_id, run.case_id, run.submitted_by, run.status, run.started_at, run.finished_at, run.outcome],
+        )
+        .map_err(|e| format!("insert run: {}", e))?;
+        Ok(())
+    }
+
+    fn update_run_status(&self, run_id: &str, status: &str, finished_at: Option<&str>, outcome: Option<&str>) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE runs SET status = ?1, finished_at = ?2, outcome = ?3 WHERE run_id = ?4",
+            params![status, finished_at, outcome, run_id],
+        )
+        .map_err(|e| format!("update run: {}", e))?;
+        Ok(())
+    }
+
+    fn get_run(&self, run_id: &str) -> Result<Option<RunRecord>, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT run_id, case_id, submitted_by, status, started_at, finished_at, outcome FROM runs WHERE run_id = ?1")
+            .map_err(|e| format!("prepare: {}", e))?;
+
+        let mut rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok(RunRecord {
+                    run_id: row.get(0)?,
+                    case_id: row.get(1)?,
+                    submitted_by: row.get(2)?,
+                    status: row.get(3)?,
+                    started_at: row.get(4)?,
+                    finished_at: row.get(5)?,
+                    outcome: row.get(6)?,
+                })
+            })
+            .map_err(|e| format!("query: {}", e))?;
+
+        match rows.next() {
+            Some(Ok(run)) => Ok(Some(run)),
+            Some(Err(e)) => Err(format!("row: {}", e)),
+            None => Ok(None),
+        }
+    }
+
+    fn list_runs(&self, case_id: &str) -> Result<Vec<RunRecord>, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT run_id, case_id, submitted_by, status, started_at, finished_at, outcome FROM runs WHERE case_id = ?1 ORDER BY started_at")
+            .map_err(|e| format!("prepare: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![case_id], |row| {
+                Ok(RunRecord {
+                    run_id: row.get(0)?,
+                    case_id: row.get(1)?,
+                    submitted_by: row.get(2)?,
+                    status: row.get(3)?,
+                    started_at: row.get(4)?,
+                    finished_at: row.get(5)?,
+                    outcome: row.get(6)?,
+                })
+            })
+            .map_err(|e| format!("query: {}", e))?;
+
+        let mut runs = Vec::new();
+        for row in rows {
+            runs.push(row.map_err(|e| format!("row: {}", e))?);
+        }
+        Ok(runs)
     }
 }
 
