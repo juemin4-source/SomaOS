@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use crate::event::envelope::{Actor, EventEnvelope};
 use crate::port::model_provider::ModelProvider;
-use soma_model::types::{SomaModelEvent, SomaModelRequest, ToolCall, ToolDefinition};
+use soma_model::types::{ModelMessage, SomaModelEvent, SomaModelRequest, ToolCall, ToolDefinition};
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 use uuid::Uuid;
+
+const MODEL_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TurnState {
@@ -27,6 +30,9 @@ pub struct TurnEngine {
     sequence: u64,
     case_id: String,
     turn_id: String,
+    tools: Vec<ToolDefinition>,
+    /// 已接受的 Observation，用于下一轮模型请求
+    observation_history: Vec<String>,
 }
 
 impl TurnEngine {
@@ -39,6 +45,8 @@ impl TurnEngine {
             sequence: 0,
             case_id,
             turn_id,
+            tools: Vec::new(),
+            observation_history: Vec::new(),
         }
     }
 
@@ -67,6 +75,7 @@ impl TurnEngine {
     /// 接收用户问题，进入 AwaitingModel
     pub fn start(&mut self, question: &str, tools: Vec<ToolDefinition>) {
         self.state = TurnState::AwaitingModel;
+        self.tools = tools.clone();
 
         let event = EventEnvelope::new(
             self.case_id.clone(),
@@ -82,6 +91,26 @@ impl TurnEngine {
         self.events.push(event);
     }
 
+    /// 构造当前 Context 对应的 SomaModelRequest
+    fn build_request(&self) -> SomaModelRequest {
+        let mut messages = Vec::new();
+
+        // 加入已接受的观察结果作为 user messages
+        for obs in &self.observation_history {
+            messages.push(ModelMessage {
+                role: "user".to_string(),
+                content: obs.clone(),
+                tool_call_id: None,
+            });
+        }
+
+        SomaModelRequest {
+            messages,
+            tools: self.tools.clone(),
+            max_tokens: Some(4096),
+        }
+    }
+
     /// 发起模型请求，消费流式事件
     /// 返回 (text_deltas, Option<ToolCall>)
     pub async fn request_model(&mut self) -> Result<(String, Option<ToolCall>), String> {
@@ -91,19 +120,12 @@ impl TurnEngine {
 
         let (tx, mut rx) = mpsc::channel(64);
 
-        let request = SomaModelRequest {
-            messages: vec![],
-            tools: vec![],
-            max_tokens: None,
-        };
+        let request = self.build_request();
 
-        // 用独立线程运行 provider（Arc clone 避免 borrow 冲突）
+        // 用 tokio::spawn 运行 provider（共享当前 runtime）
         let provider = self.provider.clone();
-        let task = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async move {
-                provider.complete_stream(request, tx).await
-            })
+        let task = tokio::spawn(async move {
+            provider.complete_stream(request, tx).await
         });
 
         let mut text = String::new();
@@ -111,56 +133,77 @@ impl TurnEngine {
         let mut pending_events: Vec<EventEnvelope> = Vec::new();
         let mut failed = None;
 
-        while let Some(event) = rx.recv().await {
-            match event {
-                SomaModelEvent::TextDelta(delta) => {
-                    text.push_str(&delta);
-                    pending_events.push(EventEnvelope::new(
-                        self.case_id.clone(), self.next_sequence(),
-                        "model.text_delta", 1, Actor::Model,
-                        serde_json::json!({"delta": delta}),
-                    ));
+        // 带超时的模型请求
+        let result = timeout(MODEL_TIMEOUT, async {
+            while let Some(event) = rx.recv().await {
+                match event {
+                    SomaModelEvent::TextDelta(delta) => {
+                        text.push_str(&delta);
+                        pending_events.push(EventEnvelope::new(
+                            self.case_id.clone(), self.next_sequence(),
+                            "model.text_delta", 1, Actor::Model,
+                            serde_json::json!({"delta": delta}),
+                        ));
+                    }
+                    SomaModelEvent::ReasoningDelta(delta) => {
+                        pending_events.push(EventEnvelope::new(
+                            self.case_id.clone(), self.next_sequence(),
+                            "model.reasoning_delta", 1, Actor::Model,
+                            serde_json::json!({"delta": delta}),
+                        ));
+                    }
+                    SomaModelEvent::ToolCallStarted(tc) => {
+                        tool_call = Some(tc.clone());
+                        pending_events.push(EventEnvelope::new(
+                            self.case_id.clone(), self.next_sequence(),
+                            "action.requested", 1, Actor::Model,
+                            serde_json::json!({"tool_call": tc}),
+                        ));
+                    }
+                    SomaModelEvent::ToolCallCompleted { call, result } => {
+                        pending_events.push(EventEnvelope::new(
+                            self.case_id.clone(), self.next_sequence(),
+                            "action.completed", 1, Actor::Model,
+                            serde_json::json!({"tool_call": call, "result": result}),
+                        ));
+                    }
+                    SomaModelEvent::ResponseCompleted => {
+                        pending_events.push(EventEnvelope::new(
+                            self.case_id.clone(), self.next_sequence(),
+                            "turn.response_completed", 1, Actor::Model,
+                            serde_json::Value::Null,
+                        ));
+                    }
+                    SomaModelEvent::ResponseFailed(err) => {
+                        failed = Some(err.clone());
+                    }
                 }
-                SomaModelEvent::ReasoningDelta(delta) => {
-                    pending_events.push(EventEnvelope::new(
-                        self.case_id.clone(), self.next_sequence(),
-                        "model.reasoning_delta", 1, Actor::Model,
-                        serde_json::json!({"delta": delta}),
-                    ));
-                }
-                SomaModelEvent::ToolCallStarted(tc) => {
-                    tool_call = Some(tc.clone());
-                    pending_events.push(EventEnvelope::new(
-                        self.case_id.clone(), self.next_sequence(),
-                        "action.requested", 1, Actor::Model,
-                        serde_json::json!({"tool_call": tc}),
-                    ));
-                }
-                SomaModelEvent::ToolCallCompleted { call, result } => {
-                    pending_events.push(EventEnvelope::new(
-                        self.case_id.clone(), self.next_sequence(),
-                        "action.completed", 1, Actor::Model,
-                        serde_json::json!({"tool_call": call, "result": result}),
-                    ));
-                }
-                SomaModelEvent::ResponseCompleted => {
-                    pending_events.push(EventEnvelope::new(
-                        self.case_id.clone(), self.next_sequence(),
-                        "turn.response_completed", 1, Actor::Model,
-                        serde_json::Value::Null,
-                    ));
-                }
-                SomaModelEvent::ResponseFailed(err) => {
-                    failed = Some(err.clone());
-                }
+            }
+        }).await;
+
+        match result {
+            Ok(()) => {
+                // rx 正常关闭
+            }
+            Err(_elapsed) => {
+                self.state = TurnState::Failed("model timeout".to_string());
+                return Err("model timed out after 120s".to_string());
             }
         }
 
-        // 等待 provider 线程结束
-        match task.join() {
+        // 检查 provider task 是否成功
+        match task.await {
             Ok(Ok(())) => {}
-            Ok(Err(e)) => return Err(format!("provider error: {}", e)),
-            Err(_) => return Err("provider thread panicked".to_string()),
+            Ok(Err(e)) => {
+                if failed.is_none() {
+                    self.state = TurnState::Failed(e.clone());
+                    return Err(format!("provider error: {}", e));
+                }
+            }
+            Err(e) => {
+                self.state = TurnState::Failed(format!("task join error: {}", e));
+                return Err(format!("task join error: {}", e));
+            }
         }
 
         if let Some(err) = failed {
@@ -168,7 +211,6 @@ impl TurnEngine {
             return Err(err);
         }
 
-        // 批量追加事件到 self.events
         self.events.append(&mut pending_events);
 
         if let Some(tc) = tool_call.as_ref() {
@@ -188,6 +230,10 @@ impl TurnEngine {
             TurnState::ActionRequested { tool_call } => tool_call.clone(),
             _ => return Err(format!("invalid state for provide_observation: {:?}", self.state)),
         };
+
+        // 保存 observation 供下一轮模型请求使用
+        self.observation_history.push(observation.to_string());
+
         self.push_event("observation.accepted", 1, Actor::User, serde_json::json!({
             "tool_call": tool_call,
             "observation": observation,

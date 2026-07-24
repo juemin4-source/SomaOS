@@ -1838,11 +1838,11 @@ dependencies = [
 name = "soma-cli"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "clap",
  "serde_json",
  "soma-core",
  "soma-model",
+ "soma-model-rig",
  "tokio",
  "tracing",
  "tracing-subscriber",
