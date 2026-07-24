@@ -1,0 +1,4 @@
+SomaOS requires ANTHROPIC_API_KEY to connect to Claude.
+  Set it with: $env:ANTHROPIC_API_KEY = "sk-ant-..."
+  Or use: cargo run -- investigate <query> --demo
+❌ 无法连接模型: ANTHROPIC_API_KEY not set

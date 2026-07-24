@@ -40,21 +40,23 @@ async fn main() {
         .init();
 
     let cli = Cli::parse();
-    match &cli.commands {
+    let result = match &cli.commands {
         Commands::Investigate { query } => run(query).await,
         Commands::Resume { case_id, model: _ } => resume(case_id).await,
+    };
+    if let Err(code) = result {
+        std::process::exit(code);
     }
 }
 
-async fn resume(case_id: &str) {
+async fn resume(case_id: &str) -> Result<(), i32> {
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    // 从 store 恢复
     let provider = match soma_model_rig::RigClaudeProvider::from_env() {
         Ok(p) => Box::new(p) as Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync>,
         Err(e) => {
             println!("❌ 无法连接模型: {}", e);
-            return;
+            return Err(1);
         }
     };
 
@@ -63,7 +65,7 @@ async fn resume(case_id: &str) {
         Ok(s) => std::sync::Arc::new(s) as std::sync::Arc<dyn soma_store::store::CaseStore>,
         Err(e) => {
             println!("❌ 无法打开存储: {}", e);
-            return;
+            return Err(1);
         }
     };
 
@@ -71,24 +73,23 @@ async fn resume(case_id: &str) {
         Ok(e) => e,
         Err(e) => {
             println!("❌ 恢复失败: {}", e);
-            return;
+            return Err(1);
         }
     };
 
     println!("🔁 已恢复 Case {}", case_id);
     println!("   事件数: {}", engine.events().len());
 
-    // 重建 registry 并继续
     let registry = build_registry(repo_root);
     let tools = registry.tool_definitions();
     println!("🔧 {} 个能力就绪", tools.len());
 
-    // 从上次中断处继续
     engine.start("继续调查", tools);
     run_turn(&mut engine, &registry).await;
+    Ok(())
 }
 
-async fn run(query: &str) {
+async fn run(query: &str) -> Result<(), i32> {
     // 加载 Rig Claude Provider（需要 ANTHROPIC_API_KEY 环境变量）
     let provider = match soma_model_rig::RigClaudeProvider::from_env() {
         Ok(p) => Box::new(p) as Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync>,
@@ -97,7 +98,7 @@ async fn run(query: &str) {
             eprintln!("  Set it with: $env:ANTHROPIC_API_KEY = \"sk-ant-...\"");
             eprintln!("  Or use: cargo run -- investigate <query> --demo");
             println!("❌ 无法连接模型: {}", e);
-            return;
+            return Err(1);
         }
     };
 
@@ -113,6 +114,7 @@ async fn run(query: &str) {
     let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
     engine.start(query, tools);
     run_turn(&mut engine, &registry).await;
+    Ok(())
 }
 
 fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {

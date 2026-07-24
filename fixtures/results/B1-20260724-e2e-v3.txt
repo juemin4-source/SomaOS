@@ -1,0 +1,8 @@
+🧪 Case SOMA-0001 已创建
+📋 目标：The function sum_to_n returns 10 instead of 15 for n=5. Find the bug and explain the fix.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+[error] provider error: stream chunk error: HttpError: Invalid status code 401 Unauthorized with message: {"type":"error","error":{"type":"authentication_error","message":"x-api-key header is required"},"request_id":"req_011CdM2QXuNvSBjZqWZf2zU6"}
+❌ 调查失败：provider error: stream chunk error: HttpError: Invalid status code 401 Unauthorized with message: {"type":"error","error":{"type":"authentication_error","message":"x-api-key header is required"},"request_id":"req_011CdM2QXuNvSBjZqWZf2zU6"}
