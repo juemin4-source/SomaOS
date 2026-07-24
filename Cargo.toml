@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "soma-core",
+    "soma-model",
+    "soma-model-rig",
+    "soma-capability",
+    "soma-store",
+    "soma-cli",
+]
+resolver = "2"

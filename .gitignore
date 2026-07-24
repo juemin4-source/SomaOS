@@ -1,0 +1,8 @@
+target/
+*.exe
+*.pdb
+*.log
+.env
+soma.db
+cases/
+provider-cache/

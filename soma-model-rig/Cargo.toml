@@ -1,0 +1,11 @@
+[package]
+name = "soma-model-rig"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rig-core = "0.40"
+soma-model = { path = "../soma-model" }
+soma-core = { path = "../soma-core" }
+async-trait = "0.1"
+tokio = { version = "1", features = ["sync"] }
