@@ -3,6 +3,14 @@ name = "soma-gate-runner"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "gate-runner"
+path = "src/main.rs"
+
+[[bin]]
+name = "probe"
+path = "src/probe.rs"
+
 [dependencies]
 soma-core = { path = "../soma-core" }
 soma-capability = { path = "../soma-capability" }

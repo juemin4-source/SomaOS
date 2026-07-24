@@ -75,7 +75,20 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
 }
 
 fn tool_definitions(registry: &CapabilityRegistry) -> Vec<ToolDefinition> {
-    registry.tool_definitions()
+    let mut tools = registry.tool_definitions();
+    tools.push(ToolDefinition {
+        name: "file_write".into(),
+        description: "Write content to a file (relative path). Use this to fix code.".into(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "file path like src/lib.rs"},
+                "content": {"type": "string", "description": "full file content"}
+            },
+            "required": ["path", "content"]
+        }),
+    });
+    tools
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -161,7 +174,10 @@ fn build_system_prompt(fixture: &PathBuf, is_soma: bool) -> String {
 }
 
 async fn run_real(args: &Args) {
-    let fixture = std::fs::canonicalize(&args.fixture).unwrap();
+    let fixture_raw = std::fs::canonicalize(&args.fixture).unwrap();
+    // Normalize UNC path to regular path (Windows CMD doesn't support UNC current_dir)
+    let fixture_str = fixture_raw.to_string_lossy().replace("\\\\?\\", "");
+    let fixture = PathBuf::from(&fixture_str);
     let is_soma = args.mode == "real-soma";
     let scenario = args.scenario.as_str();
 
@@ -307,12 +323,32 @@ fn truncate(s: &str, max: usize) -> String {
 
 // ── Baseline: direct execution ──
 
-async fn execute_baseline(tc: &ToolCall, registry: &CapabilityRegistry, _fixture: &PathBuf,
+async fn execute_baseline(tc: &ToolCall, registry: &CapabilityRegistry, fixture: &PathBuf,
     evidence: &mut EvidenceTracker, fp: &str) -> String {
-    match registry.execute(&tc.name, tc.arguments.clone()).await {
+    // Handle file_write separately (not in registry)
+    if tc.name == "file_write" {
+        let path = tc.arguments.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let content = tc.arguments.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let full_path = fixture.join(path);
+        if let Some(parent) = full_path.parent() { let _ = std::fs::create_dir_all(parent); }
+        match std::fs::write(&full_path, content) {
+            Ok(_) => {
+                evidence.record(EvidenceType::Change, &format!("write {}", path), content, &tc.name, fp);
+                format!("wrote {} bytes to {}", content.len(), path)
+            }
+            Err(e) => format!("error: {}", e),
+        }
+    } else {
+        match registry.execute(&tc.name, tc.arguments.clone()).await {
         Ok(val) => {
             let result_str = serde_json::to_string_pretty(&val).unwrap_or_default();
-            if tc.name.starts_with("process_run") {
+            // Detect if this is a cargo test run → record as Verification
+            let is_test_run = tc.name == "process_run" && tc.arguments.get("command")
+                .and_then(|v| v.as_str()).map(|s| s.contains("cargo test") || s.contains("cargo test")).unwrap_or(false);
+            if is_test_run {
+                let passed = result_str.contains("\"success\": true") || result_str.contains("test result: ok");
+                evidence.record(if passed { EvidenceType::Verification } else { EvidenceType::Observation }, &tc.name, &result_str, &tc.name, fp);
+            } else if tc.name.starts_with("process_run") {
                 evidence.record(EvidenceType::Change, &tc.name, &result_str, &tc.name, fp);
             } else {
                 evidence.record(EvidenceType::Observation, &tc.name, &result_str, &tc.name, fp);
@@ -323,6 +359,7 @@ async fn execute_baseline(tc: &ToolCall, registry: &CapabilityRegistry, _fixture
             evidence.record(EvidenceType::Observation, &tc.name, &e, &tc.name, fp);
             format!("error: {}", e)
         }
+    }
     }
 }
 

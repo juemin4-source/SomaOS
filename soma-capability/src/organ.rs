@@ -136,10 +136,11 @@ impl ProcessOrgan {
         Self {
             repo_root,
             allowed_commands: &[
-                "ls", "dir", "cat", "type", "head", "tail", "echo", "grep", "find",
+                "ls", "dir", "cat", "type", "head", "tail", "echo", "echo.", "grep", "findstr",
                 "wc", "sort", "uniq", "cut", "tr", "diff", "fc",
-                "npm", "cargo", "rustc", "node", "python",
-                "git", "pwd", "chdir", "date", "which",
+                "npm", "cargo", "rustc", "node", "python", "powershell",
+                "git", "pwd", "chdir", "cd", "date", "which", "where",
+                "copy", "xcopy", "robocopy", "mkdir", "move", "ren",
             ],
             forbidden_prefixes: &[
                 "rm", "del", "rd", "rmdir", "format",

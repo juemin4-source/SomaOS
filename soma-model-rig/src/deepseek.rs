@@ -46,6 +46,33 @@ impl ModelProvider for DeepSeekProvider {
         request: SomaModelRequest,
         sender: mpsc::Sender<SomaModelEvent>,
     ) -> Result<(), String> {
+        // Extract system prompt from messages (use first system message)
+        let system_prompt = request.messages.iter()
+            .find(|m| m.role == "system")
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+
+        // Build user prompt from all non-system messages
+        let user_prompt: String = request.messages.iter()
+            .filter(|m| m.role != "system")
+            .map(|m| {
+                if m.role == "user" {
+                    if let Some(tcid) = &m.tool_call_id {
+                        format!("[tool {} result]: {}", tcid, m.content)
+                    } else {
+                        m.content.clone()
+                    }
+                } else if m.role == "assistant" {
+                    format!("[assistant]: {}", m.content)
+                } else {
+                    m.content.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prompt = if user_prompt.is_empty() { String::new() } else { user_prompt };
+
         let tools: Vec<rig_core::completion::ToolDefinition> = request.tools.iter().map(|t| {
             rig_core::completion::ToolDefinition {
                 name: t.name.clone(),
@@ -54,8 +81,14 @@ impl ModelProvider for DeepSeekProvider {
             }
         }).collect();
 
-        let mut builder = CompletionRequestBuilder::new(self.model.clone(), "");
-        builder = builder.preamble(self.system_prompt.clone())
+        let mut builder = CompletionRequestBuilder::new(self.model.clone(), prompt);
+        // Use extracted system prompt as preamble (preferring messages over self.system_prompt)
+        let preamble = if !system_prompt.is_empty() {
+            system_prompt
+        } else {
+            self.system_prompt.clone()
+        };
+        builder = builder.preamble(preamble)
             .temperature(0.3)
             .max_tokens(u64::from(request.max_tokens.unwrap_or(4096)));
         if !tools.is_empty() {
