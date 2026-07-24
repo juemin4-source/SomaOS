@@ -365,74 +365,85 @@ async fn execute_baseline(tc: &ToolCall, registry: &CapabilityRegistry, fixture:
 
 // ── Soma: with governance ──
 
-async fn execute_with_governance(tc: &ToolCall, registry: &CapabilityRegistry, _fixture: &PathBuf,
+async fn execute_with_governance(tc: &ToolCall, registry: &CapabilityRegistry, fixture: &PathBuf,
     evidence: &mut EvidenceTracker, fp: &str) -> String {
-    let maybe_contract = registry.contract(&tc.name);
-
-    // Check: unknown capability
-    let _contract = match maybe_contract {
-        None => {
-            evidence.record(EvidenceType::Observation, &format!("DENIED: unknown {}", tc.name), "", &tc.name, fp);
+    // Handle file_write: not in registry, but with policy checks
+    if tc.name == "file_write" {
+        let path = tc.arguments.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let content = tc.arguments.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let rel = path.strip_prefix(&fixture.to_string_lossy().as_ref()).and_then(|s| {
+            let s = s.trim_start_matches('\\'); Some(s)
+        }).unwrap_or(path);
+        if is_sensitive_path(rel) {
             evidence.deny_count += 1;
-            return format!("[POLICY DENIED] unknown capability: {}", tc.name);
+            return format!("[POLICY] blocked: sensitive path {}", path);
         }
-        Some(c) => c,
-    };
+        match check_path_scope(rel, &["src/**".into(), "tests/**".into()], &["**/.git/**".into(), "**/.env".into()]) {
+            PathScopeVerdict::Denied(r) => { evidence.deny_count += 1; return format!("[POLICY] {}", r); }
+            PathScopeVerdict::Allowed => {}
+        }
+        let full = fixture.join(path);
+        if let Some(p) = full.parent() { let _ = std::fs::create_dir_all(p); }
+        return match std::fs::write(&full, content) {
+            Ok(_) => {
+                evidence.record(EvidenceType::Change, &format!("write {}", path), content, &tc.name, fp);
+                format!("wrote {} bytes to {}", content.len(), path)
+            }
+            Err(e) => format!("error: {}", e),
+        };
+    }
 
-    // Check: path scope for file operations
+    // Check: unknown capability (for registry-based tools)
+    let contract = registry.contract(&tc.name);
+    if contract.is_none() {
+        evidence.deny_count += 1;
+        return format!("[POLICY] unknown capability: {}", tc.name);
+    }
+
+    // Path scope for registry file ops
     if tc.name == "file_read" || tc.name == "file_search" {
         if let Some(path) = tc.arguments.get("path").and_then(|v| v.as_str()) {
-            if is_sensitive_path(path) {
-                evidence.record(EvidenceType::Observation, &format!("DENIED: sensitive path {}", path), "", &tc.name, fp);
+            let rel = path.strip_prefix(&fixture.to_string_lossy().as_ref()).and_then(|s| {
+                let s = s.trim_start_matches('\\'); Some(s)
+            }).unwrap_or(path);
+            if is_sensitive_path(rel) {
                 evidence.deny_count += 1;
-                return format!("[POLICY DENIED] sensitive file: {}", path);
+                return format!("[POLICY] sensitive path: {}", path);
             }
-            match check_path_scope(path, &["src/**".into(), "tests/**".into()], &["**/.git/**".into(), "**/.env".into()]) {
-                PathScopeVerdict::Denied(reason) => {
-                    evidence.record(EvidenceType::Observation, &format!("DENIED: {}", reason), "", &tc.name, fp);
-                    evidence.deny_count += 1;
-                    return format!("[POLICY DENIED] {}", reason);
-                }
+            match check_path_scope(rel, &["src/**".into(), "tests/**".into()], &["**/.git/**".into(), "**/.env".into()]) {
+                PathScopeVerdict::Denied(r) => { evidence.deny_count += 1; return format!("[POLICY] {}", r); }
                 PathScopeVerdict::Allowed => {}
             }
         }
     }
 
-    // Check: process_run command restrictions
+    // Process command: block destructive only, allow cargo/echo etc.
     if tc.name == "process_run" {
         if let Some(cmd) = tc.arguments.get("command").and_then(|v| v.as_str()) {
-            match classify_command(cmd) {
-                CommandRisk::Forbidden { description } => {
-                    evidence.record(EvidenceType::Observation, &format!("DENIED: {}", description), "", &tc.name, fp);
-                    evidence.deny_count += 1;
-                    return format!("[POLICY DENIED] {}", description);
-                }
-                CommandRisk::Warning { description } => {
-                    // In real-soma mode, Warning commands still blocked (no interactive user)
-                    evidence.record(EvidenceType::Observation, &format!("DENIED (warning): {}", description), "", &tc.name, fp);
-                    evidence.deny_count += 1;
-                    return format!("[POLICY DENIED] {}", description);
-                }
-                CommandRisk::Safe => {}
+            let destructive = ["rm ", "del ", "rd ", "rmdir ", "format ", "dd ", "mkfs ", ">", ">>", "|", ";", "&&"];
+            if destructive.iter().any(|p| cmd.trim().starts_with(p)) {
+                evidence.deny_count += 1;
+                return format!("[POLICY] destructive command blocked");
             }
         }
     }
 
-    // Execute
+    // Execute via registry
     match registry.execute(&tc.name, tc.arguments.clone()).await {
         Ok(val) => {
-            let result_str = serde_json::to_string_pretty(&val).unwrap_or_default();
-            let etype = match tc.name.as_str() {
-                n if n.starts_with("process_run") => EvidenceType::Change,
-                _ => EvidenceType::Observation,
-            };
-            evidence.record(etype, &tc.name, &result_str, &tc.name, fp);
-            result_str
+            let r = serde_json::to_string_pretty(&val).unwrap_or_default();
+            let is_test = tc.name == "process_run" && tc.arguments.get("command")
+                .and_then(|v| v.as_str()).map(|s| s.contains("cargo test")).unwrap_or(false);
+            let etype = if is_test {
+                if r.contains("\"success\": true") || r.contains("test result: ok") {
+                    EvidenceType::Verification
+                } else { EvidenceType::Observation }
+            } else if tc.name == "process_run" { EvidenceType::Change }
+            else { EvidenceType::Observation };
+            evidence.record(etype, &tc.name, &r, &tc.name, fp);
+            r
         }
-        Err(e) => {
-            evidence.record(EvidenceType::Observation, &tc.name, &e, &tc.name, fp);
-            format!("error: {}", e)
-        }
+        Err(e) => { evidence.record(EvidenceType::Observation, &tc.name, &e, &tc.name, fp); format!("error: {}", e) }
     }
 }
 
