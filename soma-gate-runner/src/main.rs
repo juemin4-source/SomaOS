@@ -371,24 +371,17 @@ async fn execute_with_governance(tc: &ToolCall, registry: &CapabilityRegistry, f
     if tc.name == "file_write" {
         let path = tc.arguments.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let content = tc.arguments.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let rel = path.strip_prefix(&fixture.to_string_lossy().as_ref()).and_then(|s| {
-            let s = s.trim_start_matches('\\'); Some(s)
-        }).unwrap_or(path);
-        if is_sensitive_path(rel) {
-            evidence.deny_count += 1;
-            return format!("[POLICY] blocked: sensitive path {}", path);
+        let full = if PathBuf::from(path).is_absolute() { PathBuf::from(path) } else { fixture.join(path) };
+        let full_str = full.to_string_lossy();
+        if is_sensitive_path(&full_str) {
+            evidence.deny_count += 1; return format!("[POLICY] sensitive path: {}", path);
         }
-        match check_path_scope(rel, &["src/**".into(), "tests/**".into()], &["**/.git/**".into(), "**/.env".into()]) {
-            PathScopeVerdict::Denied(r) => { evidence.deny_count += 1; return format!("[POLICY] {}", r); }
-            PathScopeVerdict::Allowed => {}
+        if !full.starts_with(fixture) {
+            evidence.deny_count += 1; return format!("[POLICY] path outside fixture: {}", path);
         }
-        let full = fixture.join(path);
         if let Some(p) = full.parent() { let _ = std::fs::create_dir_all(p); }
         return match std::fs::write(&full, content) {
-            Ok(_) => {
-                evidence.record(EvidenceType::Change, &format!("write {}", path), content, &tc.name, fp);
-                format!("wrote {} bytes to {}", content.len(), path)
-            }
+            Ok(_) => { evidence.record(EvidenceType::Change, &format!("write {}", path), content, &tc.name, fp); format!("wrote {} bytes to {}", content.len(), path) }
             Err(e) => format!("error: {}", e),
         };
     }
@@ -400,19 +393,16 @@ async fn execute_with_governance(tc: &ToolCall, registry: &CapabilityRegistry, f
         return format!("[POLICY] unknown capability: {}", tc.name);
     }
 
-    // Path scope for registry file ops
+    // Path scope for registry file ops: block sensitive + out-of-fixture paths
     if tc.name == "file_read" || tc.name == "file_search" {
         if let Some(path) = tc.arguments.get("path").and_then(|v| v.as_str()) {
-            let rel = path.strip_prefix(&fixture.to_string_lossy().as_ref()).and_then(|s| {
-                let s = s.trim_start_matches('\\'); Some(s)
-            }).unwrap_or(path);
-            if is_sensitive_path(rel) {
-                evidence.deny_count += 1;
-                return format!("[POLICY] sensitive path: {}", path);
+            let full = if PathBuf::from(path).is_absolute() { PathBuf::from(path) } else { fixture.join(path) };
+            let full_str = full.to_string_lossy();
+            if is_sensitive_path(&full_str) {
+                evidence.deny_count += 1; return format!("[POLICY] sensitive path: {}", path);
             }
-            match check_path_scope(rel, &["src/**".into(), "tests/**".into()], &["**/.git/**".into(), "**/.env".into()]) {
-                PathScopeVerdict::Denied(r) => { evidence.deny_count += 1; return format!("[POLICY] {}", r); }
-                PathScopeVerdict::Allowed => {}
+            if !full.starts_with(fixture) {
+                evidence.deny_count += 1; return format!("[POLICY] path outside fixture: {}", path);
             }
         }
     }
