@@ -166,7 +166,7 @@ impl Default for CapabilityRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contract::{EffectClass, Reversibility};
+    use crate::contract::EffectClass;
     use crate::organ::FileOrgan;
     use std::path::PathBuf;
 
@@ -183,10 +183,11 @@ mod tests {
         let mut reg = CapabilityRegistry::new();
 
         reg.register(
-            CapabilityContract {
-                capability_id: "file.read".into(),
-                description: "读取文件内容".into(),
-                input_schema: serde_json::json!({
+            CapabilityContract::basic(
+                "file.read",
+                "读取文件内容",
+                EffectClass::ReadOnly,
+                serde_json::json!({
                     "type": "object",
                     "properties": {
                         "action": {"const": "read"},
@@ -194,10 +195,7 @@ mod tests {
                     },
                     "required": ["action", "path"]
                 }),
-                output_schema: serde_json::json!({}),
-                effect_class: EffectClass::ReadOnly,
-                reversibility: Reversibility::Reversible,
-            },
+            ),
             Box::new(FileOrgan::new(PathBuf::from("."))),
         );
 
@@ -224,14 +222,12 @@ mod tests {
 
         let mut reg = CapabilityRegistry::new();
         reg.register(
-            CapabilityContract {
-                capability_id: "file.read".into(),
-                description: "".into(),
-                input_schema: serde_json::json!({}),
-                output_schema: serde_json::json!({}),
-                effect_class: EffectClass::ReadOnly,
-                reversibility: Reversibility::Reversible,
-            },
+            CapabilityContract::basic(
+                "file.read",
+                "",
+                EffectClass::ReadOnly,
+                serde_json::json!({}),
+            ),
             Box::new(FileOrgan::new(dir.path().to_path_buf())),
         );
 

@@ -24,7 +24,7 @@ pub enum FreshnessPolicy {
     Persistent,
 }
 
-/// Evidence 新鲜度状态
+/// 新鲜度状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FreshnessStatus {
     Fresh,
@@ -39,7 +39,7 @@ pub struct WorkspaceSnapshot {
     pub content_hashes: Vec<(String, String)>, // (file_path, hash)
 }
 
-/// Evidence ID 新类型
+/// Evidence ID
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
 pub struct EvidenceId(pub String);
 
@@ -49,7 +49,7 @@ impl std::fmt::Display for EvidenceId {
     }
 }
 
-/// Evidence 实体
+/// Evidence 实体（GATE-SOMA-NATIVE-001 扩展）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Evidence {
     pub evidence_id: EvidenceId,
@@ -62,10 +62,15 @@ pub struct Evidence {
     pub freshness_policy: FreshnessPolicy,
     pub freshness_status: FreshnessStatus,
     pub supports_claim: Option<String>,
+
+    // ── GATE-SOMA-NATIVE-001 新增字段 ──
+    /// 记录时工作区的 fingerprint（workspace 状态 hash）
+    pub workspace_fingerprint: Option<String>,
+    /// 相关文件的文件名 → 内容 hash
+    pub relevant_file_hashes: Vec<(String, String)>,
 }
 
 impl Evidence {
-    /// 创建新的 Evidence
     pub fn new(
         case_id: String,
         evidence_type: EvidenceType,
@@ -91,25 +96,10 @@ impl Evidence {
             freshness_policy,
             freshness_status: FreshnessStatus::Fresh,
             supports_claim: None,
+            workspace_fingerprint: None,
+            relevant_file_hashes: vec![],
         }
     }
-}
-
-/// 裁决状态
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum AdjudicationStatus {
-    Accepted,
-    PartiallySupported,
-    Rejected,
-    Unverifiable,
-}
-
-/// 裁决结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Adjudication {
-    pub claim_id: String,
-    pub status: AdjudicationStatus,
-    pub reasoning: String,
 }
 
 #[cfg(test)]

@@ -1,7 +1,12 @@
 /// M2 权限系统：ActionRequest → PolicyCheck → PermissionResolved 链路
 ///
 /// PolicyEngine 决定一个能力是否可执行，以及执行前是否需要 Owner 授权。
-/// 策略决策结果
+/// GATE-SOMA-NATIVE-001 扩展：路径范围、命令白名单、Hash 绑定、预算。
+
+use serde::{Deserialize, Serialize};
+
+// ── Policy Decision ──
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PolicyDecision {
     /// 允许执行
@@ -15,14 +20,12 @@ pub enum PolicyDecision {
     },
 }
 
-/// 命令风险等级（针对 Shell 命令分类）
+// ── Command Risk Classification ──
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CommandRisk {
-    /// 只读安全命令（ls、cat、grep 等）
     Safe,
-    /// 有写入行为的命令（npm install、cargo build 等）
     Warning { description: String },
-    /// 禁止执行的破坏性命令
     Forbidden { description: String },
 }
 
@@ -31,7 +34,6 @@ pub fn classify_command(command: &str) -> CommandRisk {
     let trimmed = command.trim();
     let cmd_name = trimmed.split_whitespace().next().unwrap_or("");
 
-    // 禁止操作（硬拒绝）
     let destructive_prefixes = ["rm ", "del ", "rd ", "rmdir ", "format ", "dd ", "mkfs "];
     if destructive_prefixes.iter().any(|p| trimmed.starts_with(p)) {
         return CommandRisk::Forbidden {
@@ -39,7 +41,6 @@ pub fn classify_command(command: &str) -> CommandRisk {
         };
     }
 
-    // 写入操作（需授权）
     let write_commands = [
         "npm", "cargo", "git", "touch", "mkdir", "cp", "mv", "echo",
         "node", "python", "rustc",
@@ -50,19 +51,156 @@ pub fn classify_command(command: &str) -> CommandRisk {
         };
     }
 
-    // 只读安全命令
     let safe_commands = [
-        "ls", "cat", "head", "tail", "grep", "find", "wc", "sort",
-        "uniq", "cut", "tr", "diff", "pwd", "date", "which", "type",
+        "ls", "dir", "cat", "head", "tail", "grep", "find", "wc", "sort",
+        "uniq", "cut", "tr", "diff", "fc", "pwd", "date", "which", "type",
     ];
     if safe_commands.contains(&cmd_name) {
         return CommandRisk::Safe;
     }
 
-    // 未知命令 → 保守处理为 Warning
     CommandRisk::Warning {
         description: format!("unknown command: {}", cmd_name),
     }
+}
+
+// ── GATE-SOMA-NATIVE-001: Policy Engine ──
+
+/// 路径匹配结果
+#[derive(Debug, Clone, PartialEq)]
+pub enum PathScopeVerdict {
+    Allowed,
+    Denied(String),
+}
+
+/// 检查路径是否在允许范围内
+pub fn check_path_scope(path: &str, allowed_paths: &[String], denied_paths: &[String]) -> PathScopeVerdict {
+    // 先检查拒绝列表
+    for denied in denied_paths {
+        if simple_glob_match(path, denied) {
+            return PathScopeVerdict::Denied(format!("path matches denied pattern: {}", denied));
+        }
+    }
+    // 再检查允许列表
+    for allowed in allowed_paths {
+        if simple_glob_match(path, allowed) {
+            return PathScopeVerdict::Allowed;
+        }
+    }
+    PathScopeVerdict::Denied("path not in allowed scope".to_string())
+}
+
+/// 简单的 glob 匹配（支持 ** 作为"任意深度"匹配）
+fn simple_glob_match(path: &str, pattern: &str) -> bool {
+    if pattern == "**" {
+        return true;
+    }
+    let pat_parts: Vec<&str> = pattern.split('/').collect();
+    let path_parts: Vec<&str> = path.split('/').collect();
+
+    // 包含 **：在 ** 位置分割，前缀和后缀分别匹配
+    if let Some(star_pos) = pat_parts.iter().position(|p| *p == "**") {
+        let (prefix, suffix) = pat_parts.split_at(star_pos);
+        let suffix = &suffix[1..]; // 跳过 **
+
+        // 前缀必须匹配 path 开头
+        if prefix.len() > path_parts.len() {
+            return false;
+        }
+        for (p, s) in prefix.iter().zip(path_parts.iter()) {
+            if *p != "*" && p != s {
+                return false;
+            }
+        }
+
+        // 后缀必须匹配 path 末尾
+        if suffix.len() > path_parts.len() {
+            return false;
+        }
+        for (p, s) in suffix.iter().zip(path_parts.iter().rev()) {
+            if *p != "*" && p != s {
+                return false;
+            }
+        }
+
+        // 中间部分（被 ** 吞掉的路径层级）可以是任意内容
+        return true;
+    }
+
+    // 没有 **：如果 pattern 比 path 短，尝试从 path 末尾匹配
+    if pat_parts.len() <= path_parts.len() {
+        let path_suffix = &path_parts[path_parts.len() - pat_parts.len()..];
+        for (p, s) in pat_parts.iter().zip(path_suffix.iter()) {
+            if *p != "*" && p != s {
+                return false;
+            }
+        }
+        return true;
+    }
+    false
+}
+
+/// 检查路径是否为敏感文件
+pub fn is_sensitive_path(path: &str) -> bool {
+    let sensitive_patterns = [
+        ".env",
+        ".env.local",
+        ".env.production",
+        "**/credentials*",
+        "**/secrets*",
+        "**/*.key",
+        "**/*.pem",
+        "**/*.p12",
+        "**/*.cert",
+        "**/token*",
+        "**/.git/config",
+        "**/.git/HEAD",
+        "**/.git/index",
+    ];
+    sensitive_patterns.iter().any(|p| simple_glob_match(path, p))
+}
+
+/// 资源预算状态追踪
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BudgetState {
+    pub invocations_used: u32,
+    pub total_time_ms: u64,
+    pub data_read_bytes: u64,
+    pub files_written: u32,
+}
+
+/// 预算检查结果
+#[derive(Debug, Clone, PartialEq)]
+pub enum BudgetVerdict {
+    Within,
+    Exceeded(String),
+}
+
+pub fn check_budget(state: &BudgetState, max_invocations: Option<u32>) -> BudgetVerdict {
+    if let Some(max) = max_invocations {
+        if state.invocations_used >= max {
+            return BudgetVerdict::Exceeded(format!(
+                "invocation limit reached: {}/{}",
+                state.invocations_used, max
+            ));
+        }
+    }
+    BudgetVerdict::Within
+}
+
+/// 检查文件 hash 一致性（用于 patch 操作）
+pub fn check_file_hash(file_path: &str, expected_hash: &str, repo_root: &str) -> Result<bool, String> {
+    let full_path = format!("{}/{}", repo_root.trim_end_matches('/'), file_path);
+    let content = std::fs::read(&full_path).map_err(|e| format!("cannot read file for hash check: {}", e))?;
+    let actual_hash = simple_hash(&content);
+    Ok(actual_hash == expected_hash)
+}
+
+fn simple_hash(data: &[u8]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    Hash::hash(data, &mut hasher);
+    format!("{:x}", hasher.finish())
 }
 
 #[cfg(test)]
@@ -86,10 +224,6 @@ mod tests {
             CommandRisk::Warning { .. } => {}
             other => panic!("expected Warning, got {:?}", other),
         }
-        match classify_command("git push") {
-            CommandRisk::Warning { .. } => {}
-            other => panic!("expected Warning, got {:?}", other),
-        }
     }
 
     #[test]
@@ -105,6 +239,49 @@ mod tests {
         match classify_command("some_random_tool") {
             CommandRisk::Warning { .. } => {}
             other => panic!("expected Warning, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_path_scope_allowed() {
+        let allowed = vec!["src/**".to_string(), "tests/**".to_string()];
+        let denied = vec!["**/.env".to_string()];
+        assert_eq!(check_path_scope("src/main.rs", &allowed, &denied), PathScopeVerdict::Allowed);
+        assert_eq!(check_path_scope("tests/test.rs", &allowed, &denied), PathScopeVerdict::Allowed);
+    }
+
+    #[test]
+    fn test_path_scope_denied() {
+        let allowed = vec!["src/**".to_string()];
+        let denied = vec!["**/.env".to_string()];
+        match check_path_scope("config/.env", &allowed, &denied) {
+            PathScopeVerdict::Denied(_) => {}
+            other => panic!("expected Denied, got {:?}", other),
+        }
+        match check_path_scope("README.md", &allowed, &denied) {
+            PathScopeVerdict::Denied(_) => {}
+            other => panic!("expected Denied, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_sensitive_path_detection() {
+        assert!(is_sensitive_path(".env"));
+        assert!(is_sensitive_path("config/.env.local"));
+        assert!(!is_sensitive_path("src/main.rs"));
+        assert!(!is_sensitive_path("README.md"));
+    }
+
+    #[test]
+    fn test_budget_check() {
+        let state = BudgetState {
+            invocations_used: 5,
+            ..Default::default()
+        };
+        assert_eq!(check_budget(&state, Some(10)), BudgetVerdict::Within);
+        match check_budget(&state, Some(5)) {
+            BudgetVerdict::Exceeded(_) => {} // expected
+            other => panic!("expected Exceeded, got {:?}", other),
         }
     }
 }

@@ -117,10 +117,11 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
 
     let file_organ = Arc::new(FileOrgan::new(repo_root.clone())) as Arc<dyn soma_capability::organ::Organ>;
     registry.register_arc(
-        CapabilityContract {
-            capability_id: "file_read".into(),
-            description: "读取文件内容".into(),
-            input_schema: serde_json::json!({
+        CapabilityContract::basic(
+            "file_read",
+            "读取文件内容",
+            EffectClass::ReadOnly,
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "action": {"const": "read"},
@@ -128,17 +129,15 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
                 },
                 "required": ["action", "path"]
             }),
-            output_schema: serde_json::json!({}),
-            effect_class: EffectClass::ReadOnly,
-            reversibility: Reversibility::Reversible,
-        },
+        ),
         file_organ.clone(),
     );
     registry.register_arc(
-        CapabilityContract {
-            capability_id: "file_search".into(),
-            description: "在文件中搜索文本模式".into(),
-            input_schema: serde_json::json!({
+        CapabilityContract::basic(
+            "file_search",
+            "在文件中搜索文本模式",
+            EffectClass::ReadOnly,
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "action": {"const": "search"},
@@ -147,32 +146,26 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
                 },
                 "required": ["action", "pattern"]
             }),
-            output_schema: serde_json::json!({}),
-            effect_class: EffectClass::ReadOnly,
-            reversibility: Reversibility::Reversible,
-        },
+        ),
         file_organ,
     );
 
     let process_organ = Arc::new(ProcessOrgan::new(repo_root.clone())) as Arc<dyn soma_capability::organ::Organ>;
-    registry.register_arc(
-        CapabilityContract {
-            capability_id: "process_run".into(),
-            description: "运行白名单 shell 命令（ls/cat/grep/cargo/git 等）".into(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string", "description": "要执行的命令"},
-                    "timeout": {"type": "integer", "description": "超时秒数（默认 30）"}
-                },
-                "required": ["command"]
-            }),
-            output_schema: serde_json::json!({}),
-            effect_class: EffectClass::WriteLocal,
-            reversibility: Reversibility::ConditionalReversibility,
-        },
-        process_organ,
+    let mut p_contract = CapabilityContract::basic(
+        "process_run",
+        "运行白名单 shell 命令（ls/cat/grep/cargo/git 等）",
+        EffectClass::WriteLocal,
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "要执行的命令"},
+                "timeout": {"type": "integer", "description": "超时秒数（默认 30）"}
+            },
+            "required": ["command"]
+        }),
     );
+    p_contract.reversibility = Reversibility::ConditionalReversibility;
+    registry.register_arc(p_contract, process_organ);
 
     let git_organ = Arc::new(GitOrgan::new(repo_root)) as Arc<dyn soma_capability::organ::Organ>;
     for entry in [
@@ -199,14 +192,7 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
         })),
     ] {
         registry.register_arc(
-            CapabilityContract {
-                capability_id: entry.0.into(),
-                description: entry.1.into(),
-                input_schema: entry.2,
-                output_schema: serde_json::json!({}),
-                effect_class: EffectClass::ReadOnly,
-                reversibility: Reversibility::Reversible,
-            },
+            CapabilityContract::basic(entry.0, entry.1, EffectClass::ReadOnly, entry.2),
             git_organ.clone(),
         );
     }
