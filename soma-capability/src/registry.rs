@@ -7,6 +7,68 @@ use crate::contract::CapabilityContract;
 use crate::organ::Organ;
 use soma_model::types::ToolDefinition;
 
+/// 验证输入参数是否匹配 input_schema
+///
+/// 当前验证级别：检查 required 字段存在 + const 值匹配 + 类型正确
+fn validate_params(input_schema: &Value, params: &Value) -> Result<(), String> {
+    // 必须是 object 类型
+    if input_schema.get("type").and_then(|v| v.as_str()) != Some("object") {
+        return Ok(());  // 非 object schema 不做验证
+    }
+
+    let obj = params.as_object().ok_or_else(|| "params must be a JSON object".to_string())?;
+
+    // 检查 required 字段
+    if let Some(required) = input_schema.get("required").and_then(|v| v.as_array()) {
+        for field in required {
+            let field_name = field.as_str().ok_or_else(|| "required field name must be string".to_string())?;
+            if !obj.contains_key(field_name) {
+                return Err(format!("missing required field: {}", field_name));
+            }
+        }
+    }
+
+    // 逐字段检查（根据 schema 的 properties）
+    if let Some(properties) = input_schema.get("properties").and_then(|v| v.as_object()) {
+        for (field_name, field_schema) in properties {
+            if let Some(param_value) = obj.get(field_name) {
+                // const 约束：值必须精确匹配
+                if let Some(const_val) = field_schema.get("const") {
+                    if param_value != const_val {
+                        return Err(format!(
+                            "field '{}' must be {:?}, got {:?}",
+                            field_name, const_val, param_value
+                        ));
+                    }
+                }
+                // type 约束
+                if let Some(expected_type) = field_schema.get("type").and_then(|v| v.as_str()) {
+                    match expected_type {
+                        "string" => {
+                            if !param_value.is_string() {
+                                return Err(format!("field '{}' must be a string", field_name));
+                            }
+                        }
+                        "integer" => {
+                            if !param_value.is_i64() && !param_value.is_u64() {
+                                return Err(format!("field '{}' must be an integer", field_name));
+                            }
+                        }
+                        "boolean" => {
+                            if !param_value.is_boolean() {
+                                return Err(format!("field '{}' must be a boolean", field_name));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 struct RegistryEntry {
     contract: CapabilityContract,
     organ: Arc<dyn Organ>,
@@ -61,11 +123,16 @@ impl CapabilityRegistry {
     }
 
     /// 按 capability_id 执行对应 Organ 的 execute
+    ///
+    /// 执行前验证 params 是否匹配该 capability 的 input_schema。
     pub async fn execute(&self, capability_id: &str, params: Value) -> Result<Value, String> {
         let entry = self
             .entries
             .get(capability_id)
             .ok_or_else(|| format!("unknown capability: {}", capability_id))?;
+
+        validate_params(&entry.contract.input_schema, &params)?;
+
         entry.organ.execute(params).await
     }
 

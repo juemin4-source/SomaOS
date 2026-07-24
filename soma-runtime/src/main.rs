@@ -28,7 +28,7 @@ use soma_core::policy;
 use soma_core::policy::PolicyDecision;
 use soma_core::port::model_provider::ModelProvider;
 use soma_core::run::Run;
-use soma_store::run_store::{RunRecord, RunStore};
+use soma_store::run_store::{RunRecord, RunStore, RunStatus as StoreRunStatus};
 use soma_store::sqlite::SqliteCaseStore;
 use soma_store::store::CaseStore;
 use soma_protocol::command::{Request, Response, ProtocolError, Notification};
@@ -295,6 +295,13 @@ fn decide_capability(name: &str, arguments: &serde_json::Value, registry: &Capab
 
 // ── Async run task ──
 
+/// 执行结果：成功或失败原因
+#[derive(Debug)]
+enum RunResult {
+    Completed(String),
+    Failed(String),
+}
+
 async fn run_turn_engine(
     run_id: String,
     case_id: String,
@@ -303,9 +310,9 @@ async fn run_turn_engine(
     registry: Arc<CapabilityRegistry>,
     output: Arc<OutputWriter>,
     cancel_flag: Arc<AtomicBool>,
-) {
+) -> RunResult {
     // 标记 RUNNING
-    let _ = store.update_run_status(&run_id, "RUNNING", None, None);
+    let _ = store.update_run_status(&run_id, StoreRunStatus::Running, None, None);
     output.write_notification("run.started", &serde_json::json!({
         "case_id": case_id,
         "run_id": run_id,
@@ -315,12 +322,12 @@ async fn run_turn_engine(
     let provider = match build_provider() {
         Some(p) => p,
         None => {
-            let msg = "无可用模型 Provider（设 DEEPSEEK_API_KEY 或 ANTHROPIC_API_KEY）";
-            let _ = store.update_run_status(&run_id, "FAILED", Some(&chrono::Utc::now().to_rfc3339()), Some(msg));
+            let msg = "无可用模型 Provider（设 DEEPSEEK_API_KEY 或 ANTHROPIC_API_KEY）".to_string();
+            let _ = store.update_run_status(&run_id, StoreRunStatus::Failed, Some(&chrono::Utc::now().to_rfc3339()), Some(&msg));
             output.write_notification("run.failed", &serde_json::json!({
                 "case_id": case_id, "run_id": run_id, "error": msg,
             }));
-            return;
+            return RunResult::Failed(msg);
         }
     };
 
@@ -340,17 +347,12 @@ async fn run_turn_engine(
     let (text, tool_call) = match engine.request_model().await {
         Ok(result) => result,
         Err(e) => {
-            let _ = store.update_run_status(&run_id, "FAILED", Some(&chrono::Utc::now().to_rfc3339()), Some(&e));
-            output.write_notification("run.failed", &serde_json::json!({
-                "case_id": case_id, "run_id": run_id, "error": e,
-            }));
-            return;
+            return fail_run(&run_id, &case_id, &store, &output, &e).await;
         }
     };
 
     if cancel_flag.load(Ordering::SeqCst) {
-        handle_cancel(&run_id, &case_id, &store, &output).await;
-        return;
+        return handle_cancel(&run_id, &case_id, &store, &output).await;
     }
 
     match tool_call {
@@ -389,8 +391,7 @@ async fn run_turn_engine(
             let _ = engine.provide_observation(&obs);
 
             if cancel_flag.load(Ordering::SeqCst) {
-                handle_cancel(&run_id, &case_id, &store, &output).await;
-                return;
+                return handle_cancel(&run_id, &case_id, &store, &output).await;
             }
 
             // 第二轮模型请求
@@ -399,7 +400,7 @@ async fn run_turn_engine(
                     engine.finish(&cont_text);
                     let outcome = format!("✅ 模型结论: {}", cont_text);
                     let _ = store.update_run_status(
-                        &run_id, "COMPLETED",
+                        &run_id, StoreRunStatus::Completed,
                         Some(&chrono::Utc::now().to_rfc3339()),
                         Some(&outcome),
                     );
@@ -410,16 +411,10 @@ async fn run_turn_engine(
                     output.write_notification("run.completed", &serde_json::json!({
                         "case_id": case_id, "run_id": run_id, "outcome": outcome,
                     }));
+                    RunResult::Completed(outcome)
                 }
                 Err(e) => {
-                    let _ = store.update_run_status(
-                        &run_id, "FAILED",
-                        Some(&chrono::Utc::now().to_rfc3339()),
-                        Some(&e),
-                    );
-                    output.write_notification("run.failed", &serde_json::json!({
-                        "case_id": case_id, "run_id": run_id, "error": e,
-                    }));
+                    fail_run(&run_id, &case_id, &store, &output, &e).await
                 }
             }
         }
@@ -427,7 +422,7 @@ async fn run_turn_engine(
             // 模型直接给出结论
             engine.finish(&text);
             let _ = store.update_run_status(
-                &run_id, "COMPLETED",
+                &run_id, StoreRunStatus::Completed,
                 Some(&chrono::Utc::now().to_rfc3339()),
                 Some(&text),
             );
@@ -438,19 +433,29 @@ async fn run_turn_engine(
             output.write_notification("run.completed", &serde_json::json!({
                 "case_id": case_id, "run_id": run_id, "outcome": text,
             }));
+            RunResult::Completed(text)
         }
     }
 }
 
-async fn handle_cancel(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, output: &Arc<OutputWriter>) {
+async fn fail_run(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, output: &Arc<OutputWriter>, error: &str) -> RunResult {
+    let _ = store.update_run_status(run_id, StoreRunStatus::Failed, Some(&chrono::Utc::now().to_rfc3339()), Some(error));
+    output.write_notification("run.failed", &serde_json::json!({
+        "case_id": case_id, "run_id": run_id, "error": error,
+    }));
+    RunResult::Failed(error.to_string())
+}
+
+async fn handle_cancel(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, output: &Arc<OutputWriter>) -> RunResult {
     let _ = store.update_run_status(
-        run_id, "CANCELLED",
+        run_id, StoreRunStatus::Cancelled,
         Some(&chrono::Utc::now().to_rfc3339()),
         Some("用户取消"),
     );
     output.write_notification("run.cancelled", &serde_json::json!({
         "case_id": case_id, "run_id": run_id,
     }));
+    RunResult::Failed("用户取消".to_string())
 }
 
 // ── Request handlers ──
@@ -510,7 +515,7 @@ fn handle_run_start(
         run_id: core_run.run_id,
         case_id: core_run.case_id.clone(),
         submitted_by: core_run.submitted_by.clone(),
-        status: "ACCEPTED".into(),
+        status: StoreRunStatus::Accepted,
         started_at: core_run.started_at.clone(),
         finished_at: None,
         outcome: None,
@@ -530,15 +535,24 @@ fn handle_run_start(
     let task_input = p.input.clone();
 
     tokio::spawn(async move {
-        run_turn_engine(
-            task_run_id,
-            task_case_id,
+        let result = run_turn_engine(
+            task_run_id.clone(),
+            task_case_id.clone(),
             task_input,
-            store_clone,
+            store_clone.clone(),
             registry_clone,
-            output_clone,
+            output_clone.clone(),
             cancel_flag,
         ).await;
+
+        match &result {
+            RunResult::Completed(outcome) => {
+                tracing::info!(run_id = %task_run_id, outcome = %outcome, "Run completed");
+            }
+            RunResult::Failed(error) => {
+                tracing::warn!(run_id = %task_run_id, error = %error, "Run failed");
+            }
+        }
     });
 
     let result = RunStartResult {
@@ -554,12 +568,11 @@ fn handle_run_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Re
 
     match store.get_run(&p.run_id).map_err(|e| format!("store error: {}", e))? {
         Some(record) => {
-            let status: ProtoRunStatus = serde_json::from_value(serde_json::json!(record.status))
-                .map_err(|_| format!("invalid status: {}", record.status))?;
             let result = soma_protocol::params::RunStatusResult {
                 run_id: record.run_id,
                 case_id: record.case_id,
-                status,
+                status: serde_json::from_value(serde_json::json!(record.status))
+                    .map_err(|e| format!("status conversion: {}", e))?,
                 started_at: record.started_at,
                 finished_at: record.finished_at,
                 outcome: record.outcome,
@@ -579,7 +592,7 @@ fn handle_run_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result
     }
 
     let _ = state.store.update_run_status(
-        &p.run_id, "CANCELLED",
+        &p.run_id, StoreRunStatus::Cancelled,
         Some(&chrono::Utc::now().to_rfc3339()),
         Some("用户取消"),
     );

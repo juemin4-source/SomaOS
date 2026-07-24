@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection, Result as SqlResult};
 
 use crate::run_store::RunRecord;
+use crate::run_store::RunStatus;
 use crate::run_store::RunStore;
 use crate::store::{CaseEvent, CaseStore};
 
@@ -57,10 +58,22 @@ impl SqliteCaseStore {
                 value       TEXT NOT NULL
             );
 
-            INSERT OR IGNORE INTO metadata (key, value) VALUES ('schema_version', '2');
+            INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '3');
             INSERT OR IGNORE INTO metadata (key, value) VALUES ('store_type', 'soma-sqlite');",
         )?;
         Ok(())
+    }
+
+    fn parse_status(s: &str) -> Result<RunStatus, String> {
+        match s {
+            "ACCEPTED" => Ok(RunStatus::Accepted),
+            "RUNNING" => Ok(RunStatus::Running),
+            "YIELDED" => Ok(RunStatus::Yielded),
+            "COMPLETED" => Ok(RunStatus::Completed),
+            "FAILED" => Ok(RunStatus::Failed),
+            "CANCELLED" => Ok(RunStatus::Cancelled),
+            _ => Err(format!("invalid RunStatus: {}", s)),
+        }
     }
 }
 
@@ -69,17 +82,17 @@ impl RunStore for SqliteCaseStore {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO runs (run_id, case_id, submitted_by, status, started_at, finished_at, outcome) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![run.run_id, run.case_id, run.submitted_by, run.status, run.started_at, run.finished_at, run.outcome],
+            params![run.run_id, run.case_id, run.submitted_by, run.status.as_str(), run.started_at, run.finished_at, run.outcome],
         )
         .map_err(|e| format!("insert run: {}", e))?;
         Ok(())
     }
 
-    fn update_run_status(&self, run_id: &str, status: &str, finished_at: Option<&str>, outcome: Option<&str>) -> Result<(), String> {
+    fn update_run_status(&self, run_id: &str, status: RunStatus, finished_at: Option<&str>, outcome: Option<&str>) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE runs SET status = ?1, finished_at = ?2, outcome = ?3 WHERE run_id = ?4",
-            params![status, finished_at, outcome, run_id],
+            params![status.as_str(), finished_at, outcome, run_id],
         )
         .map_err(|e| format!("update run: {}", e))?;
         Ok(())
@@ -93,20 +106,24 @@ impl RunStore for SqliteCaseStore {
 
         let mut rows = stmt
             .query_map(params![run_id], |row| {
-                Ok(RunRecord {
-                    run_id: row.get(0)?,
-                    case_id: row.get(1)?,
-                    submitted_by: row.get(2)?,
-                    status: row.get(3)?,
-                    started_at: row.get(4)?,
-                    finished_at: row.get(5)?,
-                    outcome: row.get(6)?,
-                })
+                let status_str: String = row.get(3)?;
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, status_str, row.get(4)?, row.get(5)?, row.get(6)?))
             })
             .map_err(|e| format!("query: {}", e))?;
 
         match rows.next() {
-            Some(Ok(run)) => Ok(Some(run)),
+            Some(Ok((run_id, case_id, submitted_by, status_str, started_at, finished_at, outcome))) => {
+                let status = Self::parse_status(&status_str)?;
+                Ok(Some(RunRecord {
+                    run_id,
+                    case_id,
+                    submitted_by,
+                    status,
+                    started_at,
+                    finished_at,
+                    outcome,
+                }))
+            }
             Some(Err(e)) => Err(format!("row: {}", e)),
             None => Ok(None),
         }
@@ -120,21 +137,25 @@ impl RunStore for SqliteCaseStore {
 
         let rows = stmt
             .query_map(params![case_id], |row| {
-                Ok(RunRecord {
-                    run_id: row.get(0)?,
-                    case_id: row.get(1)?,
-                    submitted_by: row.get(2)?,
-                    status: row.get(3)?,
-                    started_at: row.get(4)?,
-                    finished_at: row.get(5)?,
-                    outcome: row.get(6)?,
-                })
+                let status_str: String = row.get(3)?;
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, status_str, row.get(4)?, row.get(5)?, row.get(6)?))
             })
             .map_err(|e| format!("query: {}", e))?;
 
         let mut runs = Vec::new();
         for row in rows {
-            runs.push(row.map_err(|e| format!("row: {}", e))?);
+            let (run_id, case_id, submitted_by, status_str, started_at, finished_at, outcome) =
+                row.map_err(|e| format!("row: {}", e))?;
+            let status = Self::parse_status(&status_str)?;
+            runs.push(RunRecord {
+                run_id,
+                case_id,
+                submitted_by,
+                status,
+                started_at,
+                finished_at,
+                outcome,
+            });
         }
         Ok(runs)
     }
