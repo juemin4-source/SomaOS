@@ -12,3 +12,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 async-trait = "0.1"
 tracing = "0.1"
 soma-model = { path = "../soma-model" }
+soma-store = { path = "../soma-store" }

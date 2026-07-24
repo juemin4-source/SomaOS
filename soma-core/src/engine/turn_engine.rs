@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::event::envelope::{Actor, EventEnvelope};
 use crate::port::model_provider::ModelProvider;
 use soma_model::types::{ModelMessage, SomaModelEvent, SomaModelRequest, ToolCall, ToolDefinition};
+use soma_store::store::CaseStore;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
@@ -33,10 +34,20 @@ pub struct TurnEngine {
     tools: Vec<ToolDefinition>,
     /// 已接受的 Observation，用于下一轮模型请求
     observation_history: Vec<String>,
+    /// 可选的持久化存储
+    store: Option<Arc<dyn CaseStore>>,
 }
 
 impl TurnEngine {
     pub fn new(provider: Box<dyn ModelProvider + Send + Sync>, case_id: String) -> Self {
+        Self::with_store(provider, case_id, None)
+    }
+
+    pub fn with_store(
+        provider: Box<dyn ModelProvider + Send + Sync>,
+        case_id: String,
+        store: Option<Arc<dyn CaseStore>>,
+    ) -> Self {
         let turn_id = Uuid::new_v4().to_string();
         Self {
             state: TurnState::Idle,
@@ -47,6 +58,7 @@ impl TurnEngine {
             turn_id,
             tools: Vec::new(),
             observation_history: Vec::new(),
+            store,
         }
     }
 
@@ -60,7 +72,21 @@ impl TurnEngine {
         s
     }
 
-    fn push_event(&mut self, event_type: &str, event_version: u16, actor: Actor, payload: serde_json::Value) {
+    fn persist_event(&self, event: &EventEnvelope) {
+        if let Some(store) = &self.store {
+            if let Ok(json) = serde_json::to_value(event) {
+                let case_event = soma_store::store::CaseEvent {
+                    case_id: event.case_id.clone(),
+                    event_type: event.event_type.clone(),
+                    payload: json,
+                    version: event.event_version as u64,
+                };
+                let _ = store.append(&event.case_id, &case_event);
+            }
+        }
+    }
+
+    fn record_event(&mut self, event_type: &str, event_version: u16, actor: Actor, payload: serde_json::Value) -> EventEnvelope {
         let event = EventEnvelope::new(
             self.case_id.clone(),
             self.next_sequence(),
@@ -69,7 +95,8 @@ impl TurnEngine {
             actor,
             payload,
         );
-        self.events.push(event);
+        self.persist_event(&event);
+        event
     }
 
     /// 接收用户问题，进入 AwaitingModel
@@ -77,17 +104,14 @@ impl TurnEngine {
         self.state = TurnState::AwaitingModel;
         self.tools = tools.clone();
 
-        let event = EventEnvelope::new(
-            self.case_id.clone(),
-            self.next_sequence(),
-            "turn.started",
-            1,
-            Actor::User,
-            serde_json::json!({
-                "question": question,
-                "tools": tools,
-            }),
-        );
+        self.record_and_push("turn.started", 1, Actor::User, serde_json::json!({
+            "question": question,
+            "tools": tools,
+        }));
+    }
+
+    fn record_and_push(&mut self, event_type: &str, event_version: u16, actor: Actor, payload: serde_json::Value) {
+        let event = self.record_event(event_type, event_version, actor, payload);
         self.events.push(event);
     }
 
@@ -211,6 +235,10 @@ impl TurnEngine {
             return Err(err);
         }
 
+        // 持久化 pending_events 到 store
+        for event in &pending_events {
+            self.persist_event(event);
+        }
         self.events.append(&mut pending_events);
 
         if let Some(tc) = tool_call.as_ref() {
@@ -234,7 +262,7 @@ impl TurnEngine {
         // 保存 observation 供下一轮模型请求使用
         self.observation_history.push(observation.to_string());
 
-        self.push_event("observation.accepted", 1, Actor::User, serde_json::json!({
+        self.record_and_push("observation.accepted", 1, Actor::User, serde_json::json!({
             "tool_call": tool_call,
             "observation": observation,
         }));
@@ -253,7 +281,7 @@ impl TurnEngine {
 
     /// 结束 turn，生成 ClaimProposed
     pub fn finish(&mut self, claim: &str) {
-        self.push_event("claim.proposed", 1, Actor::Model, serde_json::json!({
+        self.record_and_push("claim.proposed", 1, Actor::Model, serde_json::json!({
             "claim": claim,
         }));
         self.state = TurnState::Completed;
@@ -269,5 +297,18 @@ impl TurnEngine {
 
     pub fn turn_id(&self) -> &str {
         &self.turn_id
+    }
+
+    /// 从 store 恢复 Case（M1 简化：验证事件存在，不完整回放）
+    pub fn resume(
+        provider: Box<dyn ModelProvider + Send + Sync>,
+        case_id: &str,
+        store: Arc<dyn CaseStore>,
+    ) -> Result<Self, String> {
+        let events = store.replay(case_id).map_err(|e| format!("replay error: {}", e))?;
+        if events.is_empty() {
+            return Err(format!("no events found for case {}", case_id));
+        }
+        Ok(Self::with_store(provider, case_id.to_string(), Some(store)))
     }
 }
