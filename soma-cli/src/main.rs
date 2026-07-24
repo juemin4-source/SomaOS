@@ -52,13 +52,17 @@ async fn main() {
 async fn resume(case_id: &str) -> Result<(), i32> {
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    let provider = match soma_model_rig::RigClaudeProvider::from_env() {
-        Ok(p) => Box::new(p) as Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync>,
-        Err(e) => {
-            println!("❌ 无法连接模型: {}", e);
+    let provider: Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync> =
+        if let Ok(p) = soma_model_rig::deepseek::DeepSeekProvider::from_env() {
+            println!("🧠 使用 DeepSeek");
+            Box::new(p)
+        } else if let Ok(p) = soma_model_rig::RigClaudeProvider::from_env() {
+            println!("🧠 使用 Claude");
+            Box::new(p)
+        } else {
+            println!("❌ 无法连接任何模型（设 DEEPSEEK_API_KEY 或 ANTHROPIC_API_KEY）");
             return Err(1);
-        }
-    };
+        };
 
     let store_path = ".somaos/cases.db";
     let store = match soma_store::sqlite::SqliteCaseStore::new(store_path) {
@@ -90,17 +94,20 @@ async fn resume(case_id: &str) -> Result<(), i32> {
 }
 
 async fn run(query: &str) -> Result<(), i32> {
-    // 加载 Rig Claude Provider（需要 ANTHROPIC_API_KEY 环境变量）
-    let provider = match soma_model_rig::RigClaudeProvider::from_env() {
-        Ok(p) => Box::new(p) as Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync>,
-        Err(e) => {
-            eprintln!("SomaOS requires ANTHROPIC_API_KEY to connect to Claude.");
-            eprintln!("  Set it with: $env:ANTHROPIC_API_KEY = \"sk-ant-...\"");
-            eprintln!("  Or use: cargo run -- investigate <query> --demo");
-            println!("❌ 无法连接模型: {}", e);
+    // 加载 Provider（按优先级：DeepSeek → Anthropic）
+    let provider: Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync> =
+        if let Ok(p) = soma_model_rig::deepseek::DeepSeekProvider::from_env() {
+            println!("🧠 使用 DeepSeek");
+            Box::new(p)
+        } else if let Ok(p) = soma_model_rig::RigClaudeProvider::from_env() {
+            println!("🧠 使用 Claude");
+            Box::new(p)
+        } else {
+            eprintln!("SomaOS requires an AI model provider.");
+            eprintln!("  Set DEEPSEEK_API_KEY or ANTHROPIC_API_KEY environment variable.");
+            println!("❌ 无法连接任何模型");
             return Err(1);
-        }
-    };
+        };
 
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let case_id = format!("SOMA-{:04}", 1u32);
@@ -123,7 +130,7 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
     let file_organ = std::sync::Arc::new(FileOrgan::new(repo_root.clone())) as std::sync::Arc<dyn soma_capability::organ::Organ>;
     registry.register_arc(
         CapabilityContract {
-            capability_id: "file.read".into(),
+            capability_id: "file_read".into(),
             description: "读取文件内容".into(),
             input_schema: serde_json::json!({
                 "type": "object",
@@ -141,7 +148,7 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
     );
     registry.register_arc(
         CapabilityContract {
-            capability_id: "file.search".into(),
+            capability_id: "file_search".into(),
             description: "在文件中搜索文本模式".into(),
             input_schema: serde_json::json!({
                 "type": "object",
@@ -162,7 +169,7 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
     let process_organ = std::sync::Arc::new(ProcessOrgan::new(repo_root.clone())) as std::sync::Arc<dyn soma_capability::organ::Organ>;
     registry.register_arc(
         CapabilityContract {
-            capability_id: "process.run".into(),
+            capability_id: "process_run".into(),
             description: "运行白名单 shell 命令（ls/cat/grep/cargo/git 等）".into(),
             input_schema: serde_json::json!({
                 "type": "object",
@@ -181,12 +188,12 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
 
     let git_organ = std::sync::Arc::new(GitOrgan::new(repo_root)) as std::sync::Arc<dyn soma_capability::organ::Organ>;
     for (cap_id, desc, input_schema) in [
-        ("git.status", "查看 git 仓库状态（dirty 文件、暂存区）", serde_json::json!({
+        ("git_status", "查看 git 仓库状态（dirty 文件、暂存区）", serde_json::json!({
             "type": "object",
             "properties": {"action": {"const": "status"}},
             "required": ["action"]
         })),
-        ("git.diff", "查看 git diff（工作树与 HEAD 的差异）", serde_json::json!({
+        ("git_diff", "查看 git diff（工作树与 HEAD 的差异）", serde_json::json!({
             "type": "object",
             "properties": {
                 "action": {"const": "diff"},
@@ -194,7 +201,7 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
             },
             "required": ["action"]
         })),
-        ("git.log", "查看 git 提交日志", serde_json::json!({
+        ("git_log", "查看 git 提交日志", serde_json::json!({
             "type": "object",
             "properties": {
                 "action": {"const": "log"},
@@ -237,7 +244,7 @@ async fn run_turn(engine: &mut soma_core::engine::turn_engine::TurnEngine, regis
                 Some(c) => match c.effect_class {
                     EffectClass::ReadOnly => PolicyDecision::Allow,
                     EffectClass::WriteLocal => {
-                        if c.capability_id == "process.run" {
+                        if c.capability_id == "process_run" {
                             let cmd = tc.arguments.get("command").and_then(|v| v.as_str()).unwrap_or("");
                             match policy::classify_command(cmd) {
                                 policy::CommandRisk::Safe => PolicyDecision::Allow,
@@ -331,7 +338,7 @@ async fn execute_capability(
             engine.record_action_committed(name, hash);
             // M3: 记录 Observation Evidence
             let evidence_type = match name {
-                n if n.starts_with("file.") || n.starts_with("git.") => "Observation",
+                n if n.starts_with("file_") || n.starts_with("git_") => "Observation",
                 _ => "Change",
             };
             engine.record_evidence(

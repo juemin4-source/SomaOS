@@ -1,0 +1,10 @@
+🧠 使用 DeepSeek
+🧪 Case SOMA-0001 已创建
+📋 目标：The function sum_to_n returns 10 instead of 15 for n=5. Find the bug.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+[2m2026-07-24T14:22:42.049358Z[0m [31mERROR[0m [2mrig_core::providers::internal::openai_chat_completions_compatible[0m[2m:[0m SSE error [3merror[0m[2m=[0mInvalidStatusCodeWithMessage(400, "{\"error\":{\"message\":\"Invalid 'tools[0].function.name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}")
+[error] provider error: stream chunk error: HttpError: Invalid status code 400 Bad Request with message: {"error":{"message":"Invalid 'tools[0].function.name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}
+❌ 调查失败：provider error: stream chunk error: HttpError: Invalid status code 400 Bad Request with message: {"error":{"message":"Invalid 'tools[0].function.name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}

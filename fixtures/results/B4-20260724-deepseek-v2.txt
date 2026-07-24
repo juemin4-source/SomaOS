@@ -1,0 +1,27 @@
+🧠 使用 DeepSeek
+🧪 Case SOMA-0001 已创建
+📋 目标：This average function panics on empty list. Find the bug.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+  模型思考: 好的，让我先了解一下这个仓库的基本情况。
+
+⚡ 请求能力：「git_status」
+   参数: {
+  "action": "status"
+}
+
+✅ 政策允许 — 自动执行
+  执行结果: {
+  "dirty": false,
+  "status": ""
+}
+
+🔍 继续调查...
+
+  模型: 好的，让我先了解一下这个仓库的基本情况。
+
+✅ Case 已解决
+   事件数: 33
+   最终状态: Completed

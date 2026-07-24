@@ -1,34 +1,34 @@
-//! Rig adapter: implements SomaOS ModelProvider using Rig's Anthropic provider.
+//! DeepSeek provider using Rig's built-in DeepSeek support.
 //!
-//! Requires `ANTHROPIC_API_KEY` environment variable to be set.
-//! Uses Rig's streaming API to emit real-time TextDelta/ToolCall events.
+//! Requires `DEEPSEEK_API_KEY` environment variable.
 
 use async_trait::async_trait;
 use futures::StreamExt;
 use rig_core::client::CompletionClient;
 use rig_core::completion::{CompletionModel, CompletionRequestBuilder};
 use rig_core::message::ReasoningContent;
-use rig_core::providers::anthropic;
+use rig_core::providers::deepseek;
 use rig_core::streaming::StreamedAssistantContent;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::types::{SomaModelEvent, SomaModelRequest, ToolCall};
 use tokio::sync::mpsc;
 
-/// Rig-backed provider for Anthropic Claude models (streaming).
-pub struct RigClaudeProvider {
-    model: anthropic::completion::GenericCompletionModel,
+/// DeepSeek provider using Rig's native adapter.
+pub struct DeepSeekProvider {
+    model: deepseek::CompletionModel,
     system_prompt: String,
 }
 
-impl RigClaudeProvider {
-    /// Create from env. Requires ANTHROPIC_API_KEY.
+impl DeepSeekProvider {
+    /// Create from env. Requires DEEPSEEK_API_KEY.
     pub fn from_env() -> Result<Self, String> {
-        let api_key = std::env::var("ANTHROPIC_API_KEY")
-            .map_err(|_| "ANTHROPIC_API_KEY not set".to_string())?;
+        let api_key = std::env::var("DEEPSEEK_API_KEY")
+            .map_err(|_| "DEEPSEEK_API_KEY not set".to_string())?;
         let model_name = std::env::var("SOMA_MODEL")
-            .unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
-        let client = anthropic::Client::new(&api_key)
-            .map_err(|e| format!("failed to create Anthropic client: {}", e))?;
+            .unwrap_or_else(|_| "deepseek-chat".to_string());
+
+        let client = deepseek::Client::new(&api_key)
+            .map_err(|e| format!("failed to create DeepSeek client: {}", e))?;
         let model = client.completion_model(&model_name);
         Ok(Self { model, system_prompt: String::new() })
     }
@@ -40,7 +40,7 @@ impl RigClaudeProvider {
 }
 
 #[async_trait]
-impl ModelProvider for RigClaudeProvider {
+impl ModelProvider for DeepSeekProvider {
     async fn complete_stream(
         &self,
         request: SomaModelRequest,
@@ -63,9 +63,8 @@ impl ModelProvider for RigClaudeProvider {
         }
         let req = builder.build();
 
-        // 使用 Rig 流式 API —— 逐个 delta 产出事件
         let mut stream = self.model.stream(req).await
-            .map_err(|e| format!("Rig stream error: {}", e))?;
+            .map_err(|e| format!("DeepSeek stream error: {}", e))?;
 
         while let Some(chunk) = stream.next().await {
             match chunk.map_err(|e| format!("stream chunk error: {}", e))? {
@@ -79,10 +78,7 @@ impl ModelProvider for RigClaudeProvider {
                         arguments: tool_call.function.arguments,
                     })).await;
                 }
-                StreamedAssistantContent::ToolCallDelta { .. } => {
-                    // 单个 delta 不足以形成完整参数。ToolCall 变体会在完成后发出完整调用。
-                    // M0 可忽略 delta，累积工作在 StreamingCompletionResponse 中自动完成。
-                }
+                StreamedAssistantContent::ToolCallDelta { .. } => {}
                 StreamedAssistantContent::Reasoning(reasoning) => {
                     for block in &reasoning.content {
                         if let ReasoningContent::Text { text, .. } = block {
@@ -93,12 +89,8 @@ impl ModelProvider for RigClaudeProvider {
                 StreamedAssistantContent::ReasoningDelta { reasoning, .. } => {
                     let _ = sender.send(SomaModelEvent::ReasoningDelta(reasoning)).await;
                 }
-                StreamedAssistantContent::Final(_response) => {
-                    // 最终响应对象包含完整 usage 等信息，M0 暂不使用
-                }
-                StreamedAssistantContent::Unknown(_) => {
-                    // Rig 未建模的原始 provider 输出，跳过
-                }
+                StreamedAssistantContent::Final(_response) => {}
+                StreamedAssistantContent::Unknown(_) => {}
             }
         }
 
@@ -107,11 +99,9 @@ impl ModelProvider for RigClaudeProvider {
     }
 }
 
-pub fn claude_provider() -> RigClaudeProvider {
-    RigClaudeProvider::from_env().expect("ANTHROPIC_API_KEY must be set")
+pub fn deepseek_provider() -> DeepSeekProvider {
+    DeepSeekProvider::from_env().expect("DEEPSEEK_API_KEY must be set")
 }
-
-pub mod deepseek;
 
 #[cfg(test)]
 mod tests {
@@ -119,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_from_env_missing_key() {
-        let result = RigClaudeProvider::from_env();
+        let result = DeepSeekProvider::from_env();
         assert!(result.is_err());
     }
 }
