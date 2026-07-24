@@ -38,13 +38,112 @@
 | crash-harness 测试 | 杀死子进程验证恢复 |
 | 全量 Review / QA / Ship | 确认 0.1 的"可恢复"承诺真实成立 |
 
-### Phase 1: 0.2 核心（协议 + Runtime 骨架）
+### Phase 1: 最小外部控制闭环（已锁定）
 
-1. **Soma Native Protocol** — typed command/event/request/response 类型
-2. **JSON-RPC over stdio** — 第一种传输
-3. **soma-runtime crate** — 可独立启动的 Runtime 进程
-4. **CLI → Runtime** — `soma` 命令变为客户端，通过 stdio JSON-RPC 控制 Runtime
-5. **Case ↔ Run 正式拆分** — Run 实体 + Run 状态机
+**范围裁决：** 接受裁剪，但保留最小 Run 实体。
+
+#### 1. Soma Native Protocol
+
+传输无关的类型定义：`SomaCommand` / `SomaResponse` / `SomaNotification` / `ProtocolError`
+
+第一批方法仅做：
+- `case/create`
+- `case/get`
+- `run/start`
+- `run/get`
+- `run/cancel`
+
+#### 2. 最小 Run 实体
+
+```
+Run
+├─ run_id
+├─ case_id
+├─ submitted_by
+├─ status (ACCEPTED | RUNNING | YIELDED | COMPLETED | FAILED | CANCELLED)
+├─ started_at
+├─ finished_at
+└─ outcome
+```
+
+暂不做：完整 Run 调度策略、Turn/Action 对外暴露、Budget、多 Run 并行、Principal。
+
+#### 3. JSON-RPC over stdio
+
+```
+soma-runtime --stdio
+```
+- `run/start` 立即返回 `run_id`，不阻塞
+- 进度与终态通过 Notification 发出：`run.started` / `run.output` / `run.yielded` / `run.completed` / `run.failed`
+- 每条 Notification 携带 `case_id` + `run_id` + `sequence`（为未来 Event Replay 预留）
+
+#### 4. Runtime 最小骨架
+
+CLI/外部调用方按需启动子进程，不常驻：
+```
+Client → spawn soma-runtime --stdio → JSON-RPC → Core
+```
+Case 和 Run 状态必须进入 Store。
+
+#### 5. CLI 改为真实客户端
+
+CLI 不得保留直接调用 Core 的生产旁路。Native Protocol 是内外统一的真实产品边界。
+
+#### Phase 1 验收标准
+
+1. 外部测试程序可以启动 `soma-runtime --stdio`
+2. 通过 JSON-RPC 创建持久 Case
+3. `run/start` 立即返回稳定 `run_id`
+4. Runtime 通过 Notification 输出运行进度和终态
+5. `run/get` 可查询当前状态和结果
+6. `run/cancel` 能取消运行中的 Run
+7. CLI 使用同一协议完成现有 `investigate` 路径
+8. Runtime 退出后 Case 与已结束 Run 仍可查询
+9. CLI 中不存在直接调用 Core 的生产旁路
+10. Fixture Provider 的完整协议 E2E 自动通过
+
+---
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 3 architecture findings resolved, scope reduced per recommendation |
+
+**Architecture findings resolved:**
+1. CLI bypass prevention → A) Compile-time isolation + `soma-client` crate. CLI depends only on soma-client + soma-protocol.
+2. New crate policy → A) Independent `soma-protocol` and `soma-client` from day 1. Protocol belongs in control plane, not model crate.
+3. Dependency rules frozen → `soma-cli` must not depend on soma-core/soma-model/soma-store/soma-capability. CI dependency-boundary check required.
+
+**CODEX:** Skipped (codex_reviews not configured)
+**VERDICT:** ENG CLEARED — scope accepted with reduction (minimal Run + protocol skeleton, defer full Run/Turn/Action scheduling)
+
+**NOT in scope (Phase 1):**
+- MCP Adapter — Phase 2
+- Turn/Action public protocol — Phase 2+
+- Principal/Delegation — Phase 2
+- Event replay / reconnection — Phase 2
+- Multi-client concurrent access — Phase 2+
+- On-demand daemon lifecycle — Phase 2+
+- HTTP/WebSocket transport — Phase 2+
+
+**What already exists:**
+- `soma-core` has TurnEngine, EventEnvelope, Policy — Runtime wraps, doesn't rebuild
+- `soma-store` has SQLite CaseStore with append/replay — extend for Run persistence, don't replace
+- `soma-model` has ToolDefinition, ToolCall types — protocol reuses serde patterns
+- JSON-RPC is a standard, not an invention — Rust has `serde_json` already in the dep tree
+
+**Failure modes:**
+- Runtime process crash mid-Run → Run enters FAILED, Case remains queryable (store-persisted)
+- Protocol version mismatch between CLI and Runtime → Runtime rejects unknown methods, CLI gets ProtocolError
+- `run/start` finishes before Runtime outputs any Notification → Client can poll `run/get` for terminal state
+- Store write fails during `case/create` → Runtime returns error, CLI retries or reports to user
+
+**Parallelization:**
+- Sequential: crate creation (protocol → client → runtime), all interdependent
+- One implementation lane: Phase 1 is inherently sequential since each layer builds on the prior
+
+NO UNRESOLVED DECISIONS
 
 ### Phase 2: 外部 AI 接入（MCP + 治理）
 
@@ -75,6 +174,6 @@
 
 > 外部 AI 或应用能够创建、查询、暂停、继续和接管 Soma Case；连接中断后工作仍然存在，所有调用仍经过 SomaOS 的权限、状态和证据治理。
 
-## The Assignment
+## 0.1 RC 状态
 
-> **在你离开之前：** 改一行代码。把 `soma-cli/src/main.rs` 里 `TurnEngine::new()` 那行改成 `TurnEngine::with_store()` 并传入 SQLite Store。然后 `cargo test`。如果测试全过——恭喜，0.1 的缺口已经修了一半。如果挂了——那就是我们需要正视的证据：0.1 的"可恢复"承诺尚未成立。
+> 已由 commit `d094cae` 完成。Store 已接入 investigate 路径。36/36 测试通过。缺口关闭。

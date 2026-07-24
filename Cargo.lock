@@ -1925,6 +1925,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "soma-client"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soma-protocol",
+ "tokio",
+]
+
+[[package]]
 name = "soma-core"
 version = "0.1.0"
 dependencies = [
@@ -1958,6 +1968,14 @@ dependencies = [
  "soma-core",
  "soma-model",
  "tokio",
+]
+
+[[package]]
+name = "soma-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

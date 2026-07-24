@@ -6,5 +6,7 @@ members = [
     "soma-capability",
     "soma-store",
     "soma-cli",
+    "soma-protocol",
+    "soma-client",
 ]
 resolver = "2"
