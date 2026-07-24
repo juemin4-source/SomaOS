@@ -217,22 +217,7 @@ async fn run(query: &str) {
             let obs = match &decision {
                 PolicyDecision::Allow => {
                     println!("✅ 政策允许 — 自动执行");
-                    engine.record_action_started(&tc.name, &tc.arguments);
-                    match registry.execute(&tc.name, tc.arguments.clone()).await {
-                        Ok(result) => {
-                            let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
-                            println!("  执行结果: {}", formatted);
-                            let hash = &formatted[..formatted.len().min(32)];
-                            engine.record_action_committed(&tc.name, hash);
-                            formatted
-                        }
-                        Err(e) => {
-                            let msg = format!("执行失败: {}", e);
-                            engine.record_action_failed(&tc.name, &msg);
-                            eprintln!("  {}", msg);
-                            msg
-                        }
-                    }
+                    execute_capability(&mut engine, &registry, &tc.name, tc.arguments.clone()).await
                 }
                 PolicyDecision::Deny(reason) => {
                     println!("🚫 政策拒绝: {}", reason);
@@ -252,22 +237,7 @@ async fn run(query: &str) {
                         msg.to_string()
                     } else {
                         engine.record_permission_granted(&tc.name, "owner");
-                        engine.record_action_started(&tc.name, &tc.arguments);
-                        match registry.execute(&tc.name, tc.arguments.clone()).await {
-                            Ok(result) => {
-                                let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
-                                println!("  执行结果: {}", formatted);
-                                let hash = &formatted[..formatted.len().min(32)];
-                                engine.record_action_committed(&tc.name, hash);
-                                formatted
-                            }
-                            Err(e) => {
-                                let msg = format!("执行失败: {}", e);
-                                engine.record_action_failed(&tc.name, &msg);
-                                eprintln!("  {}", msg);
-                                msg
-                            }
-                        }
+                        execute_capability(&mut engine, &registry, &tc.name, tc.arguments.clone()).await
                     }
                 }
             };
@@ -298,6 +268,31 @@ async fn run(query: &str) {
         Err(e) => {
             eprintln!("[error] {}", e);
             println!("❌ 调查失败：{}", e);
+        }
+    }
+}
+
+/// 执行能力并记录 ActionTrace 事件
+async fn execute_capability(
+    engine: &mut soma_core::engine::turn_engine::TurnEngine,
+    registry: &soma_capability::registry::CapabilityRegistry,
+    name: &str,
+    arguments: serde_json::Value,
+) -> String {
+    engine.record_action_started(name, &arguments);
+    match registry.execute(name, arguments).await {
+        Ok(result) => {
+            let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
+            println!("  执行结果: {}", formatted);
+            let hash = &formatted[..formatted.len().min(32)];
+            engine.record_action_committed(name, hash);
+            formatted
+        }
+        Err(e) => {
+            let msg = format!("执行失败: {}", e);
+            engine.record_action_failed(name, &msg);
+            eprintln!("  {}", msg);
+            msg
         }
     }
 }
