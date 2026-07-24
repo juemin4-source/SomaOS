@@ -272,7 +272,7 @@ async fn run(query: &str) {
     }
 }
 
-/// 执行能力并记录 ActionTrace 事件
+/// 执行能力并记录 ActionTrace + Evidence 事件
 async fn execute_capability(
     engine: &mut soma_core::engine::turn_engine::TurnEngine,
     registry: &soma_capability::registry::CapabilityRegistry,
@@ -286,11 +286,29 @@ async fn execute_capability(
             println!("  执行结果: {}", formatted);
             let hash = &formatted[..formatted.len().min(32)];
             engine.record_action_committed(name, hash);
+            // M3: 记录 Observation Evidence
+            let evidence_type = match name {
+                n if n.starts_with("file.") || n.starts_with("git.") => "Observation",
+                _ => "Change",
+            };
+            engine.record_evidence(
+                &format!("EV-{}-{}", name, &hash[..8]),
+                evidence_type,
+                &format!("{} result", name),
+                Some(name),
+            );
             formatted
         }
         Err(e) => {
             let msg = format!("执行失败: {}", e);
             engine.record_action_failed(name, &msg);
+            // M3: 记录 Observation Evidence（失败）
+            engine.record_evidence(
+                &format!("EV-{}-failed", name),
+                "Observation",
+                &format!("{} failed", name),
+                Some(name),
+            );
             eprintln!("  {}", msg);
             msg
         }

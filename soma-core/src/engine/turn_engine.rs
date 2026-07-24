@@ -338,6 +338,38 @@ impl TurnEngine {
         }));
     }
 
+    // ── M3: Evidence Events ──
+
+    /// 记录一条 Evidence
+    pub fn record_evidence(&mut self, evidence_id: &str, evidence_type: &str, subject: &str, producer_action_id: Option<&str>) {
+        let mut payload = serde_json::json!({
+            "evidence_id": evidence_id,
+            "evidence_type": evidence_type,
+            "subject": subject,
+        });
+        if let Some(aid) = producer_action_id {
+            payload["producer_action_id"] = serde_json::Value::String(aid.to_string());
+        }
+        self.record_and_push("evidence.recorded", 1, Actor::System, payload);
+    }
+
+    /// 标记 Evidence 为 Stale
+    pub fn record_evidence_staled(&mut self, evidence_id: &str, staled_by_action_id: &str) {
+        self.record_and_push("evidence.staled", 1, Actor::System, serde_json::json!({
+            "evidence_id": evidence_id,
+            "staled_by_action_id": staled_by_action_id,
+        }));
+    }
+
+    /// 记录裁决结果
+    pub fn record_claim_adjudicated(&mut self, claim: &str, status: &str, reasoning: &str) {
+        self.record_and_push("claim.adjudicated", 1, Actor::System, serde_json::json!({
+            "claim": claim,
+            "status": status,
+            "reasoning": reasoning,
+        }));
+    }
+
     pub fn events(&self) -> &[EventEnvelope] {
         &self.events
     }
