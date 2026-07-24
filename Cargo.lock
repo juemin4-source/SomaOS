@@ -1917,6 +1917,7 @@ dependencies = [
  "soma-core",
  "soma-model",
  "soma-model-rig",
+ "soma-store",
  "tokio",
  "tracing",
  "tracing-subscriber",

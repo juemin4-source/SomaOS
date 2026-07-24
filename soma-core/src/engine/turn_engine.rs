@@ -338,6 +338,14 @@ impl TurnEngine {
         }));
     }
 
+    /// 记录 Action 状态不确定（crash 发生在 execution_started 和 committed 之间）
+    pub fn record_action_uncertain(&mut self, capability_id: &str, reason: &str) {
+        self.record_and_push("action.execution_uncertain", 1, Actor::System, serde_json::json!({
+            "capability_id": capability_id,
+            "reason": reason,
+        }));
+    }
+
     // ── M3: Evidence Events ──
 
     /// 记录一条 Evidence
@@ -382,16 +390,51 @@ impl TurnEngine {
         &self.turn_id
     }
 
-    /// 从 store 恢复 Case（M1 简化：验证事件存在，不完整回放）
+    /// 从 store 恢复 Case（M4: 事件回放 + 不确定 Action 检测）
     pub fn resume(
         provider: Box<dyn ModelProvider + Send + Sync>,
         case_id: &str,
         store: Arc<dyn CaseStore>,
     ) -> Result<Self, String> {
-        let events = store.replay(case_id).map_err(|e| format!("replay error: {}", e))?;
-        if events.is_empty() {
+        let stored = store.replay(case_id).map_err(|e| format!("replay error: {}", e))?;
+        if stored.is_empty() {
             return Err(format!("no events found for case {}", case_id));
         }
-        Ok(Self::with_store(provider, case_id.to_string(), Some(store)))
+
+        // 反序列化事件
+        let mut events: Vec<EventEnvelope> = Vec::new();
+        let mut max_sequence = 0u64;
+        let observation_history: Vec<String> = Vec::new();
+
+        for case_event in &stored {
+            if let Ok(envelope) = serde_json::from_value::<EventEnvelope>(case_event.payload.clone()) {
+                max_sequence = max_sequence.max(envelope.sequence);
+                events.push(envelope);
+            }
+        }
+
+        // 检测不确定的 Action（有 execution_started 但无 committed/failed）
+        let has_started = events.iter().any(|e| e.event_type == "action.execution_started");
+        let has_committed = events.iter().any(|e| e.event_type == "action.execution_committed");
+        let has_failed = events.iter().any(|e| e.event_type == "action.execution_failed");
+
+        let mut engine = Self::with_store(provider, case_id.to_string(), Some(store));
+        engine.sequence = max_sequence + 1;
+        engine.events = events;
+
+        // 恢复 observation 历史
+        if !observation_history.is_empty() {
+            engine.observation_history = observation_history;
+        }
+
+        // 如果有 started 但没有 committed/failed，标记为 uncertain
+        if has_started && !has_committed && !has_failed {
+            engine.record_action_uncertain("unknown", "crash before action committed");
+        }
+
+        // 设置状态为 AwaitingModel，让调用者继续
+        engine.state = TurnState::AwaitingModel;
+
+        Ok(engine)
     }
 }

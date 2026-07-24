@@ -19,6 +19,14 @@ enum Commands {
         /// Problem description
         query: String,
     },
+    /// Resume a previous case from storage
+    Resume {
+        /// Case ID (e.g. SOMA-0001)
+        case_id: String,
+        /// Model override (optional)
+        #[arg(long)]
+        model: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -34,7 +42,50 @@ async fn main() {
     let cli = Cli::parse();
     match &cli.commands {
         Commands::Investigate { query } => run(query).await,
+        Commands::Resume { case_id, model: _ } => resume(case_id).await,
     }
+}
+
+async fn resume(case_id: &str) {
+    let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // 从 store 恢复
+    let provider = match soma_model_rig::RigClaudeProvider::from_env() {
+        Ok(p) => Box::new(p) as Box<dyn soma_core::port::model_provider::ModelProvider + Send + Sync>,
+        Err(e) => {
+            println!("❌ 无法连接模型: {}", e);
+            return;
+        }
+    };
+
+    let store_path = ".somaos/cases.db";
+    let store = match soma_store::sqlite::SqliteCaseStore::new(store_path) {
+        Ok(s) => std::sync::Arc::new(s) as std::sync::Arc<dyn soma_store::store::CaseStore>,
+        Err(e) => {
+            println!("❌ 无法打开存储: {}", e);
+            return;
+        }
+    };
+
+    let mut engine = match soma_core::engine::turn_engine::TurnEngine::resume(provider, case_id, store) {
+        Ok(e) => e,
+        Err(e) => {
+            println!("❌ 恢复失败: {}", e);
+            return;
+        }
+    };
+
+    println!("🔁 已恢复 Case {}", case_id);
+    println!("   事件数: {}", engine.events().len());
+
+    // 重建 registry 并继续
+    let registry = build_registry(repo_root);
+    let tools = registry.tool_definitions();
+    println!("🔧 {} 个能力就绪", tools.len());
+
+    // 从上次中断处继续
+    engine.start("继续调查", tools);
+    run_turn(&mut engine, &registry).await;
 }
 
 async fn run(query: &str) {
@@ -55,7 +106,16 @@ async fn run(query: &str) {
     println!("🧪 Case {} 已创建", case_id);
     println!("📋 目标：{}", query);
 
-    // 构建 CapabilityRegistry（composition root：创建 Organ 实例并注册）
+    let registry = build_registry(repo_root);
+    let tools = registry.tool_definitions();
+    println!("🔧 已注册 {} 个能力", tools.len());
+
+    let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
+    engine.start(query, tools);
+    run_turn(&mut engine, &registry).await;
+}
+
+fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
     let mut registry = CapabilityRegistry::new();
 
     let file_organ = std::sync::Arc::new(FileOrgan::new(repo_root.clone())) as std::sync::Arc<dyn soma_capability::organ::Organ>;
@@ -153,13 +213,10 @@ async fn run(query: &str) {
             git_organ.clone(),
         );
     }
+    registry
+}
 
-    let tools = registry.tool_definitions();
-    println!("🔧 已注册 {} 个能力", tools.len());
-
-    let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
-    engine.start(query, tools);
-
+async fn run_turn(engine: &mut soma_core::engine::turn_engine::TurnEngine, registry: &CapabilityRegistry) {
     println!("\n🔍 正在调查...\n");
 
     match engine.request_model().await {
@@ -172,43 +229,27 @@ async fn run(query: &str) {
             println!("   参数: {}", serde_json::to_string_pretty(&tc.arguments).unwrap());
             println!();
 
-            // ── M2: Policy Check ──
             let contract = registry.contract(&tc.name);
             let decision = match contract {
                 None => PolicyDecision::Deny(format!("未知能力: {}", tc.name)),
                 Some(c) => match c.effect_class {
                     EffectClass::ReadOnly => PolicyDecision::Allow,
                     EffectClass::WriteLocal => {
-                        // process.run 需要进一步分类命令风险
                         if c.capability_id == "process.run" {
-                            let cmd = tc.arguments.get("command")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let cmd = tc.arguments.get("command").and_then(|v| v.as_str()).unwrap_or("");
                             match policy::classify_command(cmd) {
                                 policy::CommandRisk::Safe => PolicyDecision::Allow,
-                                policy::CommandRisk::Warning { description } => {
-                                    PolicyDecision::NeedsOwner {
-                                        reason: format!("⚠️ {} — {}", description, cmd),
-                                    }
-                                }
-                                policy::CommandRisk::Forbidden { description } => {
-                                    PolicyDecision::Deny(format!("🚫 {}", description))
-                                }
+                                policy::CommandRisk::Warning { description } => PolicyDecision::NeedsOwner {
+                                    reason: format!("⚠️ {} — {}", description, cmd),
+                                },
+                                policy::CommandRisk::Forbidden { description } => PolicyDecision::Deny(format!("🚫 {}", description)),
                             }
                         } else {
-                            PolicyDecision::NeedsOwner {
-                                reason: format!("需要授权写入操作: {}", c.description),
-                            }
+                            PolicyDecision::NeedsOwner { reason: format!("需要授权写入操作: {}", c.description) }
                         }
                     }
-                    EffectClass::WriteGlobal => {
-                        PolicyDecision::Deny("全局写入操作暂不支持".into())
-                    }
-                    EffectClass::SideEffect => {
-                        PolicyDecision::NeedsOwner {
-                            reason: format!("需要授权副作用操作: {}", c.description),
-                        }
-                    }
+                    EffectClass::WriteGlobal => PolicyDecision::Deny("全局写入操作暂不支持".into()),
+                    EffectClass::SideEffect => PolicyDecision::NeedsOwner { reason: format!("需要授权副作用操作: {}", c.description) },
                 },
             };
 
@@ -217,7 +258,7 @@ async fn run(query: &str) {
             let obs = match &decision {
                 PolicyDecision::Allow => {
                     println!("✅ 政策允许 — 自动执行");
-                    execute_capability(&mut engine, &registry, &tc.name, tc.arguments.clone()).await
+                    execute_capability(engine, registry, &tc.name, tc.arguments.clone()).await
                 }
                 PolicyDecision::Deny(reason) => {
                     println!("🚫 政策拒绝: {}", reason);
@@ -237,7 +278,7 @@ async fn run(query: &str) {
                         msg.to_string()
                     } else {
                         engine.record_permission_granted(&tc.name, "owner");
-                        execute_capability(&mut engine, &registry, &tc.name, tc.arguments.clone()).await
+                        execute_capability(engine, registry, &tc.name, tc.arguments.clone()).await
                     }
                 }
             };
