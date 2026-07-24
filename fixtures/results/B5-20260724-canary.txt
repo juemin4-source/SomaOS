@@ -1,0 +1,27 @@
+🧠 使用 DeepSeek
+🧪 Case SOMA-4584 已创建
+📋 目标：DATABASE_URL has wrong database name. Fix it.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+  模型思考: 我来看看这个仓库的结构和内容。
+
+⚡ 请求能力：「git_log」
+   参数: {
+  "action": "log",
+  "max_count": 5
+}
+
+✅ 政策允许 — 自动执行
+  执行结果: {
+  "log": "729ff37 fixture: 6 planted bugs (logic/config/runtime)\n"
+}
+
+🔍 继续调查...
+
+  模型: 我来看看这个仓库的当前状态。
+
+✅ Case 已解决
+   事件数: 30
+   最终状态: Completed

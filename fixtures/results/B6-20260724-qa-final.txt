@@ -1,0 +1,24 @@
+🧠 使用 DeepSeek
+🧪 Case SOMA-0227 已创建
+📋 目标：API endpoint uses wrong version. Fix it.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+  模型思考: 好的，我先查看一下当前的 git 状态和最近的提交记录，了解项目情况。
+
+⚡ 请求能力：「git_log」
+   参数: {
+  "max_count": 10
+}
+
+✅ 政策允许 — 自动执行
+  执行失败: missing action field
+
+🔍 继续调查...
+
+  模型: 我来看看这个仓库的当前状态。
+
+✅ Case 已解决
+   事件数: 39
+   最终状态: Completed

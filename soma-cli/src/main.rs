@@ -118,7 +118,20 @@ async fn run(query: &str) -> Result<(), i32> {
     let tools = registry.tool_definitions();
     println!("🔧 已注册 {} 个能力", tools.len());
 
-    let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
+    // 初始化持久化 Store
+    let store_path = ".somaos/cases.db";
+    if let Some(parent) = std::path::Path::new(store_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let store = match soma_store::sqlite::SqliteCaseStore::new(store_path) {
+        Ok(s) => Some(std::sync::Arc::new(s) as std::sync::Arc<dyn soma_store::store::CaseStore>),
+        Err(e) => {
+            eprintln!("[warn] Store 初始化失败（将使用内存模式）: {}", e);
+            None
+        }
+    };
+
+    let mut engine = soma_core::engine::turn_engine::TurnEngine::with_store(provider, case_id, store);
     engine.start(query, tools);
     run_turn(&mut engine, &registry).await;
     Ok(())

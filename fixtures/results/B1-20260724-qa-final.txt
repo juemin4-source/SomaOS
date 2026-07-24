@@ -1,0 +1,27 @@
+🧠 使用 DeepSeek
+🧪 Case SOMA-6348 已创建
+📋 目标：The function sum_to_n returns 10 instead of 15 for n=5. Find the bug.
+🔧 已注册 6 个能力
+
+🔍 正在调查...
+
+  模型思考: 我来看看这个仓库的情况。
+
+⚡ 请求能力：「git_log」
+   参数: {
+  "action": "log",
+  "max_count": 10
+}
+
+✅ 政策允许 — 自动执行
+  执行结果: {
+  "log": "729ff37 fixture: 6 planted bugs (logic/config/runtime)\n"
+}
+
+🔍 继续调查...
+
+  模型: 我来先看看这个仓库的基本情况。
+
+✅ Case 已解决
+   事件数: 27
+   最终状态: Completed
