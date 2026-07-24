@@ -284,12 +284,41 @@ SomaOS 1.0 与现有 Coding Agent 的核心区别不在聊天界面，而在后�
 
 ## 十、当前 immediate next
 
-阶段二（研发能力原生化）的起点：把 GATE-002 验证过的 Bug 修复场景，从"实验"变成"产品"。
+阶段二（研发能力原生化）的第一批 Softill 和 Combo 不应由我们坐在桌前设计出来。
 
-具体来说，短期内需要：
-1. 把调查 Combo 和修复 Combo 从 gate-runner 移入正式 crate
-2. Softill 接口定型（不在 Organ 层直接暴露给模型，而是通过 Softill 投影）
-3. 阶段系统的最小实现（调查 → 实施 → 验证，支持进入和回退）
-4. 路径 A（调查修复）达到日常可用
+**能力和供体是 gstack。** gstack 已经在真实研发中长出了完整的 Skill 体系（`/review`、`/qa`、`/ship` 等）、阶段路由和交付纪律。SomaOS 的第一套研发能力应该从 gstack 的源码和真实运行轨迹中解剖出来，而不是从头发明。
 
-这些需要回到实施阶段。本文件作为北极星，指导后续每次架构和范围决策。
+因此 immediate next 不是编码，而是：
+
+> **GATE-SOMA-GSTACK-EXTRACTION-001 — gstack 能力考古与原生化**
+
+一个四阶段的提取 Gate：
+
+1. **源码地图** — 扫描 gstack，建立命令/Skill、入口路由、Prompt 规则、脚本工具、产物格式、上下文传递、Review/QA Gate 的全景图
+2. **责任分解** — 对每个主要 Skill 回答：用户交给它什么责任？它必须产出什么？内部有哪些稳定动作？
+3. **四层候选表** — 输出 Skill、Combo、Softill、Stage/Routing 四张候选清单，每个标记来源、职责、输入输出、复用位置、动态性
+4. **纵向切片** — 选第一刀（候选：Review Finding 处理），抽取并原生化第一批能力
+
+### Native 标准
+
+某项能力成为 SomaOS 原生能力，不取决于它是否用 Rust 重写，而取决于：
+
+- Soma 能发现它
+- Soma 理解它的责任与输入输出
+- Soma 能在合适阶段选择它
+- 它能调用 Softill 或子 Combo
+- 它的状态与产物属于 Soma 工作对象
+- 它能根据反馈调整
+- 它不依赖用户手动复制 Prompt 才能运行
+
+即使第一版内部仍通过 Claude Code/gstack 执行，只要控制权、工作状态和能力语义已经进入 Soma，它也可以算"Hosted Native"。
+
+### 双层关系
+
+```
+Claude Code → gstack（Hosted 能力体系，继续运转）
+                ↓ 能力考古与抽取
+             SomaOS（逐步吸收 Native 能力）
+```
+
+gstack 继续帮助开发 SomaOS。每吸收一块，SomaOS 就少依赖一点外部 Prompt 编排，多拥有一点原生研发能力。到 1.0 时 gstack 可能仍然作为能力来源、对照组或兼容层保留。
