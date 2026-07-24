@@ -25,7 +25,7 @@ impl DeepSeekProvider {
         let api_key = std::env::var("DEEPSEEK_API_KEY")
             .map_err(|_| "DEEPSEEK_API_KEY not set".to_string())?;
         let model_name = std::env::var("SOMA_MODEL")
-            .unwrap_or_else(|_| "deepseek-chat".to_string());
+            .unwrap_or_else(|_| "deepseek-v4-flash".to_string());
 
         let client = deepseek::Client::new(&api_key)
             .map_err(|e| format!("failed to create DeepSeek client: {}", e))?;

@@ -1944,6 +1944,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "soma-gate-runner"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "serde",
+ "serde_json",
+ "soma-capability",
+ "soma-core",
+ "soma-model",
+ "soma-model-rig",
+ "soma-store",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "soma-model"
 version = "0.1.0"
 dependencies = [
