@@ -18,6 +18,7 @@ pub enum Reversibility {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityContract {
     pub capability_id: String,
+    pub description: String,
     pub input_schema: serde_json::Value,
     pub output_schema: serde_json::Value,
     pub effect_class: EffectClass,

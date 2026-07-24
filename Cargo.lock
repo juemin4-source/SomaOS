@@ -1871,6 +1871,7 @@ dependencies = [
  "async-trait",
  "serde",
  "serde_json",
+ "soma-model",
  "tempfile",
  "tokio",
  "walkdir",
@@ -1882,6 +1883,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "serde_json",
+ "soma-capability",
  "soma-core",
  "soma-model",
  "soma-model-rig",

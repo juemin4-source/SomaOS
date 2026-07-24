@@ -1,0 +1,179 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use serde_json::Value;
+
+use crate::contract::CapabilityContract;
+use crate::organ::Organ;
+use soma_model::types::ToolDefinition;
+
+struct RegistryEntry {
+    contract: CapabilityContract,
+    organ: Arc<dyn Organ>,
+}
+
+/// 能力注册表：Organ 注册 → ToolDefinition 生成 → ToolCall 路由分派
+///
+/// 这是 SomaOS 控制面对外暴露的能力目录。CLI 在 composition root 中
+/// 创建 Organ 实例并注册到此处，TurnEngine 通过 registry 将模型请求的
+/// ToolCall 分派到对应 Organ 执行。
+pub struct CapabilityRegistry {
+    entries: HashMap<String, RegistryEntry>,
+}
+
+impl CapabilityRegistry {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    /// 注册一项能力（从 Box）
+    ///
+    /// `capability_id` 必须唯一。重复注册会覆盖前一个。
+    pub fn register(&mut self, contract: CapabilityContract, organ: Box<dyn Organ>) {
+        self.register_arc(contract, Arc::from(organ));
+    }
+
+    /// 注册一项能力（从 Arc，用于多个 capability 共享同一个 Organ）
+    ///
+    /// 同一个 Organ 实例可以注册多个 capability_id（如 file.read + file.search 共享 FileOrgan）。
+    pub fn register_arc(&mut self, contract: CapabilityContract, organ: Arc<dyn Organ>) {
+        self.entries.insert(
+            contract.capability_id.clone(),
+            RegistryEntry { contract, organ },
+        );
+    }
+
+    /// 生成所有已注册能力的 ToolDefinition 列表（供模型选择）
+    pub fn tool_definitions(&self) -> Vec<ToolDefinition> {
+        self.entries
+            .values()
+            .map(|entry| {
+                let c = &entry.contract;
+                ToolDefinition {
+                    name: c.capability_id.clone(),
+                    description: c.description.clone(),
+                    parameters: c.input_schema.clone(),
+                }
+            })
+            .collect()
+    }
+
+    /// 按 capability_id 执行对应 Organ 的 execute
+    pub async fn execute(&self, capability_id: &str, params: Value) -> Result<Value, String> {
+        let entry = self
+            .entries
+            .get(capability_id)
+            .ok_or_else(|| format!("unknown capability: {}", capability_id))?;
+        entry.organ.execute(params).await
+    }
+
+    /// 返回已注册的 capability_id 列表
+    pub fn capability_ids(&self) -> Vec<String> {
+        self.entries.keys().cloned().collect()
+    }
+
+    /// 返回已注册的能力数量
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// 是否为空
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl Default for CapabilityRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contract::{EffectClass, Reversibility};
+    use crate::organ::FileOrgan;
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_empty_registry() {
+        let reg = CapabilityRegistry::new();
+        assert!(reg.is_empty());
+        assert_eq!(reg.len(), 0);
+        assert!(reg.tool_definitions().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_register_and_tool_definitions() {
+        let mut reg = CapabilityRegistry::new();
+
+        reg.register(
+            CapabilityContract {
+                capability_id: "file.read".into(),
+                description: "读取文件内容".into(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "action": {"const": "read"},
+                        "path": {"type": "string"}
+                    },
+                    "required": ["action", "path"]
+                }),
+                output_schema: serde_json::json!({}),
+                effect_class: EffectClass::ReadOnly,
+                reversibility: Reversibility::Reversible,
+            },
+            Box::new(FileOrgan::new(PathBuf::from("."))),
+        );
+
+        assert_eq!(reg.len(), 1);
+        let defs = reg.tool_definitions();
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].name, "file.read");
+        assert_eq!(defs[0].description, "读取文件内容");
+    }
+
+    #[tokio::test]
+    async fn test_execute_unknown_capability() {
+        let reg = CapabilityRegistry::new();
+        let result = reg.execute("nonexistent", serde_json::json!({})).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown capability"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_file_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let test_file = dir.path().join("test.txt");
+        std::fs::write(&test_file, "hello from registry").unwrap();
+
+        let mut reg = CapabilityRegistry::new();
+        reg.register(
+            CapabilityContract {
+                capability_id: "file.read".into(),
+                description: "".into(),
+                input_schema: serde_json::json!({}),
+                output_schema: serde_json::json!({}),
+                effect_class: EffectClass::ReadOnly,
+                reversibility: Reversibility::Reversible,
+            },
+            Box::new(FileOrgan::new(dir.path().to_path_buf())),
+        );
+
+        let result = reg
+            .execute(
+                "file.read",
+                serde_json::json!({
+                    "action": "read",
+                    "path": "test.txt",
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["content"], "hello from registry");
+    }
+}

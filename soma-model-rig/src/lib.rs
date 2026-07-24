@@ -79,7 +79,7 @@ impl ModelProvider for RigClaudeProvider {
                         arguments: tool_call.function.arguments,
                     })).await;
                 }
-                StreamedAssistantContent::ToolCallDelta { content, .. } => {
+                StreamedAssistantContent::ToolCallDelta { .. } => {
                     // 单个 delta 不足以形成完整参数。ToolCall 变体会在完成后发出完整调用。
                     // M0 可忽略 delta，累积工作在 StreamingCompletionResponse 中自动完成。
                 }

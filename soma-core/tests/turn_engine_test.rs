@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use soma_core::engine::turn_engine::TurnEngine;
-use soma_core::event::envelope::{Actor, EventEnvelope};
+
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::types::{SomaModelEvent, SomaModelRequest, ToolCall};
 use tokio::sync::mpsc;

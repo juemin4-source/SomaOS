@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use soma_model::types::ToolDefinition;
+use std::path::PathBuf;
+use soma_capability::contract::{CapabilityContract, EffectClass, Reversibility};
+use soma_capability::organ::{FileOrgan, GitOrgan, ProcessOrgan};
+use soma_capability::registry::CapabilityRegistry;
 
 #[derive(Parser)]
 #[command(name = "soma", version = "0.1.0", about = "SomaOS CLI — AI-native work runtime")]
@@ -46,24 +49,115 @@ async fn run(query: &str) {
         }
     };
 
+    let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let case_id = format!("SOMA-{:04}", 1u32);
     println!("🧪 Case {} 已创建", case_id);
     println!("📋 目标：{}", query);
 
-    let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
+    // 构建 CapabilityRegistry（composition root：创建 Organ 实例并注册）
+    let mut registry = CapabilityRegistry::new();
 
-    engine.start(
-        query,
-        vec![ToolDefinition {
-            name: "file.read".to_string(),
-            description: "读取文件内容".to_string(),
-            parameters: serde_json::json!({
+    let file_organ = std::sync::Arc::new(FileOrgan::new(repo_root.clone())) as std::sync::Arc<dyn soma_capability::organ::Organ>;
+    registry.register_arc(
+        CapabilityContract {
+            capability_id: "file.read".into(),
+            description: "读取文件内容".into(),
+            input_schema: serde_json::json!({
                 "type": "object",
-                "properties": {"path": {"type": "string"}},
-                "required": ["path"]
+                "properties": {
+                    "action": {"const": "read"},
+                    "path": {"type": "string", "description": "文件路径（相对或绝对，必须在 repo 内）"}
+                },
+                "required": ["action", "path"]
             }),
-        }],
+            output_schema: serde_json::json!({}),
+            effect_class: EffectClass::ReadOnly,
+            reversibility: Reversibility::Reversible,
+        },
+        file_organ.clone(),
     );
+    registry.register_arc(
+        CapabilityContract {
+            capability_id: "file.search".into(),
+            description: "在文件中搜索文本模式".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "action": {"const": "search"},
+                    "pattern": {"type": "string", "description": "搜索关键词"},
+                    "path": {"type": "string", "description": "文件名过滤（可选）"}
+                },
+                "required": ["action", "pattern"]
+            }),
+            output_schema: serde_json::json!({}),
+            effect_class: EffectClass::ReadOnly,
+            reversibility: Reversibility::Reversible,
+        },
+        file_organ,
+    );
+
+    let process_organ = std::sync::Arc::new(ProcessOrgan::new(repo_root.clone())) as std::sync::Arc<dyn soma_capability::organ::Organ>;
+    registry.register_arc(
+        CapabilityContract {
+            capability_id: "process.run".into(),
+            description: "运行白名单 shell 命令（ls/cat/grep/cargo/git 等）".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "要执行的命令"},
+                    "timeout": {"type": "integer", "description": "超时秒数（默认 30）"}
+                },
+                "required": ["command"]
+            }),
+            output_schema: serde_json::json!({}),
+            effect_class: EffectClass::WriteLocal,
+            reversibility: Reversibility::ConditionalReversibility,
+        },
+        process_organ,
+    );
+
+    let git_organ = std::sync::Arc::new(GitOrgan::new(repo_root)) as std::sync::Arc<dyn soma_capability::organ::Organ>;
+    for (cap_id, desc, input_schema) in [
+        ("git.status", "查看 git 仓库状态（dirty 文件、暂存区）", serde_json::json!({
+            "type": "object",
+            "properties": {"action": {"const": "status"}},
+            "required": ["action"]
+        })),
+        ("git.diff", "查看 git diff（工作树与 HEAD 的差异）", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {"const": "diff"},
+                "path": {"type": "string", "description": "指定文件路径（可选）"}
+            },
+            "required": ["action"]
+        })),
+        ("git.log", "查看 git 提交日志", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {"const": "log"},
+                "max_count": {"type": "integer", "description": "最大提交数（默认 10）"}
+            },
+            "required": ["action"]
+        })),
+    ] {
+        registry.register_arc(
+            CapabilityContract {
+                capability_id: cap_id.into(),
+                description: desc.into(),
+                input_schema: input_schema,
+                output_schema: serde_json::json!({}),
+                effect_class: EffectClass::ReadOnly,
+                reversibility: Reversibility::Reversible,
+            },
+            git_organ.clone(),
+        );
+    }
+
+    let tools = registry.tool_definitions();
+    println!("🔧 已注册 {} 个能力", tools.len());
+
+    let mut engine = soma_core::engine::turn_engine::TurnEngine::new(provider, case_id);
+    engine.start(query, tools);
 
     println!("\n🔍 正在调查...\n");
 
@@ -73,22 +167,25 @@ async fn run(query: &str) {
 
             println!("  模型思考: {}", text);
             println!();
-            println!("⚡ 请求使用能力：「{}」", tc.name);
+            println!("⚡ 自动执行能力：「{}」", tc.name);
             println!("   参数: {}", serde_json::to_string_pretty(&tc.arguments).unwrap());
             println!();
 
-            // 用户授权（阻塞等待输入）
-            print!("🔐 是否授权？[Y/n] ");
-            std::io::Write::flush(&mut std::io::stdout()).unwrap_or(());
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).unwrap_or(0);
-            let obs = if input.trim().to_lowercase() == "n" {
-                "用户拒绝了请求"
-            } else {
-                "用户已授权，文件内容正常"
+            // 通过 CapabilityRegistry 自动执行 ToolCall
+            let obs = match registry.execute(&tc.name, tc.arguments).await {
+                Ok(result) => {
+                    let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
+                    println!("  执行结果: {}", formatted);
+                    formatted
+                }
+                Err(e) => {
+                    let msg = format!("执行失败: {}", e);
+                    eprintln!("  {}", msg);
+                    msg
+                }
             };
 
-            engine.provide_observation(obs).unwrap();
+            engine.provide_observation(&obs).unwrap();
             println!("\n🔍 继续调查...\n");
 
             match engine.continue_turn().await {
