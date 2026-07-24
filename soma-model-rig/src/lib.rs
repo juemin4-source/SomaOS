@@ -1,16 +1,20 @@
 //! Rig adapter: implements SomaOS ModelProvider using Rig's Anthropic provider.
 //!
 //! Requires `ANTHROPIC_API_KEY` environment variable to be set.
+//! Uses Rig's streaming API to emit real-time TextDelta/ToolCall events.
 
 use async_trait::async_trait;
+use futures::StreamExt;
 use rig_core::client::CompletionClient;
-use rig_core::completion::{AssistantContent, CompletionModel, CompletionRequestBuilder};
+use rig_core::completion::{CompletionModel, CompletionRequestBuilder};
+use rig_core::message::ReasoningContent;
 use rig_core::providers::anthropic;
+use rig_core::streaming::StreamedAssistantContent;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::types::{SomaModelEvent, SomaModelRequest, ToolCall};
 use tokio::sync::mpsc;
 
-/// Rig-backed provider for Anthropic Claude models.
+/// Rig-backed provider for Anthropic Claude models (streaming).
 pub struct RigClaudeProvider {
     model: anthropic::completion::GenericCompletionModel,
     system_prompt: String,
@@ -51,37 +55,54 @@ impl ModelProvider for RigClaudeProvider {
         }).collect();
 
         let mut builder = CompletionRequestBuilder::new(self.model.clone(), "");
-        builder = builder.preamble(self.system_prompt.clone()).temperature(0.3).max_tokens(u64::from(request.max_tokens.unwrap_or(4096)));
+        builder = builder.preamble(self.system_prompt.clone())
+            .temperature(0.3)
+            .max_tokens(u64::from(request.max_tokens.unwrap_or(4096)));
         if !tools.is_empty() {
             builder = builder.tools(tools);
         }
         let req = builder.build();
 
-        let response = self.model.completion(req).await.map_err(|e| format!("Rig error: {}", e))?;
+        // 使用 Rig 流式 API —— 逐个 delta 产出事件
+        let mut stream = self.model.stream(req).await
+            .map_err(|e| format!("Rig stream error: {}", e))?;
 
-        for item in response.choice.iter() {
-            match item {
-                AssistantContent::Text(t) => {
-                    sender.send(SomaModelEvent::TextDelta(t.text.clone())).await.ok();
+        while let Some(chunk) = stream.next().await {
+            match chunk.map_err(|e| format!("stream chunk error: {}", e))? {
+                StreamedAssistantContent::Text(text) => {
+                    let _ = sender.send(SomaModelEvent::TextDelta(text.text)).await;
                 }
-                AssistantContent::ToolCall(tc) => {
-                    sender.send(SomaModelEvent::ToolCallStarted(ToolCall {
-                        id: tc.id.clone(),
-                        name: tc.function.name.clone(),
-                        arguments: tc.function.arguments.clone(),
-                    })).await.ok();
+                StreamedAssistantContent::ToolCall { tool_call, .. } => {
+                    let _ = sender.send(SomaModelEvent::ToolCallStarted(ToolCall {
+                        id: tool_call.id.clone(),
+                        name: tool_call.function.name,
+                        arguments: tool_call.function.arguments,
+                    })).await;
                 }
-                AssistantContent::Reasoning(r) => {
-                    for block in &r.content {
-                        if let rig_core::message::ReasoningContent::Text { text, .. } = block {
-                            sender.send(SomaModelEvent::ReasoningDelta(text.clone())).await.ok();
+                StreamedAssistantContent::ToolCallDelta { content, .. } => {
+                    // 单个 delta 不足以形成完整参数。ToolCall 变体会在完成后发出完整调用。
+                    // M0 可忽略 delta，累积工作在 StreamingCompletionResponse 中自动完成。
+                }
+                StreamedAssistantContent::Reasoning(reasoning) => {
+                    for block in &reasoning.content {
+                        if let ReasoningContent::Text { text, .. } = block {
+                            let _ = sender.send(SomaModelEvent::ReasoningDelta(text.clone())).await;
                         }
                     }
                 }
-                _ => {}
+                StreamedAssistantContent::ReasoningDelta { reasoning, .. } => {
+                    let _ = sender.send(SomaModelEvent::ReasoningDelta(reasoning)).await;
+                }
+                StreamedAssistantContent::Final(_response) => {
+                    // 最终响应对象包含完整 usage 等信息，M0 暂不使用
+                }
+                StreamedAssistantContent::Unknown(_) => {
+                    // Rig 未建模的原始 provider 输出，跳过
+                }
             }
         }
-        sender.send(SomaModelEvent::ResponseCompleted).await.ok();
+
+        let _ = sender.send(SomaModelEvent::ResponseCompleted).await;
         Ok(())
     }
 }

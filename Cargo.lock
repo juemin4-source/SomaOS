@@ -1875,6 +1875,7 @@ name = "soma-model-rig"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "rig-core",
  "soma-core",
  "soma-model",
