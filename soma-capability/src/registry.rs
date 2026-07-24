@@ -69,6 +69,11 @@ impl CapabilityRegistry {
         entry.organ.execute(params).await
     }
 
+    /// 按 capability_id 查找对应的契约
+    pub fn contract(&self, capability_id: &str) -> Option<&CapabilityContract> {
+        self.entries.get(capability_id).map(|e| &e.contract)
+    }
+
     /// 返回已注册的 capability_id 列表
     pub fn capability_ids(&self) -> Vec<String> {
         self.entries.keys().cloned().collect()

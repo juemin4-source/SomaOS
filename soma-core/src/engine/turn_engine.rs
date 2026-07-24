@@ -287,6 +287,57 @@ impl TurnEngine {
         self.state = TurnState::Completed;
     }
 
+    // ── M2: Policy & Action Trace Events ──
+
+    /// 记录政策评估结果
+    pub fn record_policy_evaluated(&mut self, capability_id: &str, decision: &str, policy_used: &str) {
+        self.record_and_push("policy.evaluated", 1, Actor::System, serde_json::json!({
+            "capability_id": capability_id,
+            "decision": decision,
+            "policy_used": policy_used,
+        }));
+    }
+
+    /// 记录权限已授予
+    pub fn record_permission_granted(&mut self, capability_id: &str, granted_by: &str) {
+        self.record_and_push("permission.granted", 1, Actor::User, serde_json::json!({
+            "capability_id": capability_id,
+            "granted_by": granted_by,
+        }));
+    }
+
+    /// 记录权限被拒绝
+    pub fn record_permission_denied(&mut self, capability_id: &str, reason: &str) {
+        self.record_and_push("permission.denied", 1, Actor::System, serde_json::json!({
+            "capability_id": capability_id,
+            "reason": reason,
+        }));
+    }
+
+    /// 记录 Action 开始执行
+    pub fn record_action_started(&mut self, capability_id: &str, params: &serde_json::Value) {
+        self.record_and_push("action.execution_started", 1, Actor::Capability, serde_json::json!({
+            "capability_id": capability_id,
+            "params": params,
+        }));
+    }
+
+    /// 记录 Action 执行成功
+    pub fn record_action_committed(&mut self, capability_id: &str, result_hash: &str) {
+        self.record_and_push("action.execution_committed", 1, Actor::Capability, serde_json::json!({
+            "capability_id": capability_id,
+            "result_hash": result_hash,
+        }));
+    }
+
+    /// 记录 Action 执行失败
+    pub fn record_action_failed(&mut self, capability_id: &str, error: &str) {
+        self.record_and_push("action.execution_failed", 1, Actor::Capability, serde_json::json!({
+            "capability_id": capability_id,
+            "error": error,
+        }));
+    }
+
     pub fn events(&self) -> &[EventEnvelope] {
         &self.events
     }

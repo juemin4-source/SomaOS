@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use soma_capability::contract::{CapabilityContract, EffectClass, Reversibility};
 use soma_capability::organ::{FileOrgan, GitOrgan, ProcessOrgan};
 use soma_capability::registry::CapabilityRegistry;
+use soma_core::policy::{self, PolicyDecision};
 
 #[derive(Parser)]
 #[command(name = "soma", version = "0.1.0", about = "SomaOS CLI — AI-native work runtime")]
@@ -144,7 +145,7 @@ async fn run(query: &str) {
             CapabilityContract {
                 capability_id: cap_id.into(),
                 description: desc.into(),
-                input_schema: input_schema,
+                input_schema,
                 output_schema: serde_json::json!({}),
                 effect_class: EffectClass::ReadOnly,
                 reversibility: Reversibility::Reversible,
@@ -167,21 +168,107 @@ async fn run(query: &str) {
 
             println!("  模型思考: {}", text);
             println!();
-            println!("⚡ 自动执行能力：「{}」", tc.name);
+            println!("⚡ 请求能力：「{}」", tc.name);
             println!("   参数: {}", serde_json::to_string_pretty(&tc.arguments).unwrap());
             println!();
 
-            // 通过 CapabilityRegistry 自动执行 ToolCall
-            let obs = match registry.execute(&tc.name, tc.arguments).await {
-                Ok(result) => {
-                    let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
-                    println!("  执行结果: {}", formatted);
-                    formatted
+            // ── M2: Policy Check ──
+            let contract = registry.contract(&tc.name);
+            let decision = match contract {
+                None => PolicyDecision::Deny(format!("未知能力: {}", tc.name)),
+                Some(c) => match c.effect_class {
+                    EffectClass::ReadOnly => PolicyDecision::Allow,
+                    EffectClass::WriteLocal => {
+                        // process.run 需要进一步分类命令风险
+                        if c.capability_id == "process.run" {
+                            let cmd = tc.arguments.get("command")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            match policy::classify_command(cmd) {
+                                policy::CommandRisk::Safe => PolicyDecision::Allow,
+                                policy::CommandRisk::Warning { description } => {
+                                    PolicyDecision::NeedsOwner {
+                                        reason: format!("⚠️ {} — {}", description, cmd),
+                                    }
+                                }
+                                policy::CommandRisk::Forbidden { description } => {
+                                    PolicyDecision::Deny(format!("🚫 {}", description))
+                                }
+                            }
+                        } else {
+                            PolicyDecision::NeedsOwner {
+                                reason: format!("需要授权写入操作: {}", c.description),
+                            }
+                        }
+                    }
+                    EffectClass::WriteGlobal => {
+                        PolicyDecision::Deny("全局写入操作暂不支持".into())
+                    }
+                    EffectClass::SideEffect => {
+                        PolicyDecision::NeedsOwner {
+                            reason: format!("需要授权副作用操作: {}", c.description),
+                        }
+                    }
+                },
+            };
+
+            engine.record_policy_evaluated(&tc.name, &format!("{:?}", &decision), "effect_class");
+
+            let obs = match &decision {
+                PolicyDecision::Allow => {
+                    println!("✅ 政策允许 — 自动执行");
+                    engine.record_action_started(&tc.name, &tc.arguments);
+                    match registry.execute(&tc.name, tc.arguments.clone()).await {
+                        Ok(result) => {
+                            let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
+                            println!("  执行结果: {}", formatted);
+                            let hash = &formatted[..formatted.len().min(32)];
+                            engine.record_action_committed(&tc.name, hash);
+                            formatted
+                        }
+                        Err(e) => {
+                            let msg = format!("执行失败: {}", e);
+                            engine.record_action_failed(&tc.name, &msg);
+                            eprintln!("  {}", msg);
+                            msg
+                        }
+                    }
                 }
-                Err(e) => {
-                    let msg = format!("执行失败: {}", e);
-                    eprintln!("  {}", msg);
-                    msg
+                PolicyDecision::Deny(reason) => {
+                    println!("🚫 政策拒绝: {}", reason);
+                    engine.record_permission_denied(&tc.name, reason);
+                    format!("请求被拒绝: {}", reason)
+                }
+                PolicyDecision::NeedsOwner { reason } => {
+                    println!("🔐 {}", reason);
+                    print!("  是否授权？[Y/n] ");
+                    std::io::Write::flush(&mut std::io::stdout()).unwrap_or(());
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap_or(0);
+                    if input.trim().to_lowercase() == "n" {
+                        let msg = "用户拒绝了请求";
+                        engine.record_permission_denied(&tc.name, msg);
+                        println!("  {}", msg);
+                        msg.to_string()
+                    } else {
+                        engine.record_permission_granted(&tc.name, "owner");
+                        engine.record_action_started(&tc.name, &tc.arguments);
+                        match registry.execute(&tc.name, tc.arguments.clone()).await {
+                            Ok(result) => {
+                                let formatted = serde_json::to_string_pretty(&result).unwrap_or_default();
+                                println!("  执行结果: {}", formatted);
+                                let hash = &formatted[..formatted.len().min(32)];
+                                engine.record_action_committed(&tc.name, hash);
+                                formatted
+                            }
+                            Err(e) => {
+                                let msg = format!("执行失败: {}", e);
+                                engine.record_action_failed(&tc.name, &msg);
+                                eprintln!("  {}", msg);
+                                msg
+                            }
+                        }
+                    }
                 }
             };
 
