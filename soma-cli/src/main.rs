@@ -110,7 +110,7 @@ async fn run(query: &str) -> Result<(), i32> {
         };
 
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let case_id = format!("SOMA-{:04}", 1u32);
+    let case_id = format!("SOMA-{:04}", rand::random::<u16>() % 10000);
     println!("🧪 Case {} 已创建", case_id);
     println!("📋 目标：{}", query);
 
@@ -275,6 +275,7 @@ async fn run_turn(engine: &mut soma_core::engine::turn_engine::TurnEngine, regis
                     format!("请求被拒绝: {}", reason)
                 }
                 PolicyDecision::NeedsOwner { reason } => {
+                    engine.record_permission_requested(&tc.name, reason);
                     println!("🔐 {}", reason);
                     print!("  是否授权？[Y/n] ");
                     std::io::Write::flush(&mut std::io::stdout()).unwrap_or(());

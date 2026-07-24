@@ -108,8 +108,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_env_missing_key() {
+    fn test_from_env_key_dependent() {
         let result = DeepSeekProvider::from_env();
-        assert!(result.is_err());
+        if std::env::var("DEEPSEEK_API_KEY").is_ok() {
+            assert!(result.is_ok(), "should succeed when DEEPSEEK_API_KEY is set");
+        } else {
+            assert!(result.is_err(), "should fail when DEEPSEEK_API_KEY is not set");
+        }
     }
 }

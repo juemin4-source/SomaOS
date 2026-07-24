@@ -298,6 +298,14 @@ impl TurnEngine {
         }));
     }
 
+    /// 记录权限请求（M2 补充：在 granted/denied 前发出）
+    pub fn record_permission_requested(&mut self, capability_id: &str, reason: &str) {
+        self.record_and_push("permission.requested", 1, Actor::System, serde_json::json!({
+            "capability_id": capability_id,
+            "reason": reason,
+        }));
+    }
+
     /// 记录权限已授予
     pub fn record_permission_granted(&mut self, capability_id: &str, granted_by: &str) {
         self.record_and_push("permission.granted", 1, Actor::User, serde_json::json!({
@@ -311,6 +319,15 @@ impl TurnEngine {
         self.record_and_push("permission.denied", 1, Actor::System, serde_json::json!({
             "capability_id": capability_id,
             "reason": reason,
+        }));
+    }
+
+    /// 记录 Case 状态变更
+    pub fn record_case_state_changed(&mut self, lifecycle: &str, phase: &str, resolution: &str) {
+        self.record_and_push("case.state_changed", 1, Actor::System, serde_json::json!({
+            "lifecycle": lifecycle,
+            "phase": phase,
+            "resolution": resolution,
         }));
     }
 
@@ -404,32 +421,63 @@ impl TurnEngine {
         // 反序列化事件
         let mut events: Vec<EventEnvelope> = Vec::new();
         let mut max_sequence = 0u64;
-        let observation_history: Vec<String> = Vec::new();
+        let mut observation_history: Vec<String> = Vec::new();
+        let mut tools: Vec<soma_model::types::ToolDefinition> = Vec::new();
 
         for case_event in &stored {
             if let Ok(envelope) = serde_json::from_value::<EventEnvelope>(case_event.payload.clone()) {
                 max_sequence = max_sequence.max(envelope.sequence);
+
+                // 恢复 observation 历史
+                if envelope.event_type == "observation.accepted" {
+                    if let Some(obs) = envelope.payload.get("observation").and_then(|v| v.as_str()) {
+                        observation_history.push(obs.to_string());
+                    }
+                }
+
+                // 恢复 tools（从 turn.started 事件）
+                if envelope.event_type == "turn.started" {
+                    if let Some(t) = envelope.payload.get("tools") {
+                        if let Ok(defs) = serde_json::from_value::<Vec<soma_model::types::ToolDefinition>>(t.clone()) {
+                            tools = defs;
+                        }
+                    }
+                }
+
                 events.push(envelope);
             }
         }
 
-        // 检测不确定的 Action（有 execution_started 但无 committed/failed）
-        let has_started = events.iter().any(|e| e.event_type == "action.execution_started");
-        let has_committed = events.iter().any(|e| e.event_type == "action.execution_committed");
-        let has_failed = events.iter().any(|e| e.event_type == "action.execution_failed");
+        if events.is_empty() {
+            return Err(format!("no valid events found for case {}", case_id));
+        }
+
+        // 逐 action 检测不确定的 Action（有 execution_started 但无 committed/failed）
+        let uncertain_ids: Vec<String> = {
+            let started: Vec<&EventEnvelope> = events.iter()
+                .filter(|e| e.event_type == "action.execution_started")
+                .collect();
+            let committed_or_failed: Vec<&str> = events.iter()
+                .filter(|e| e.event_type == "action.execution_committed" || e.event_type == "action.execution_failed")
+                .filter_map(|e| e.payload.get("capability_id").and_then(|v| v.as_str()))
+                .collect();
+
+            started.iter()
+                .filter_map(|e| e.payload.get("capability_id").and_then(|v| v.as_str()))
+                .filter(|id| !committed_or_failed.contains(id))
+                .map(|s| s.to_string())
+                .collect()
+        };
 
         let mut engine = Self::with_store(provider, case_id.to_string(), Some(store));
         engine.sequence = max_sequence + 1;
         engine.events = events;
+        engine.observation_history = observation_history;
+        engine.tools = tools;
 
-        // 恢复 observation 历史
-        if !observation_history.is_empty() {
-            engine.observation_history = observation_history;
-        }
-
-        // 如果有 started 但没有 committed/failed，标记为 uncertain
-        if has_started && !has_committed && !has_failed {
-            engine.record_action_uncertain("unknown", "crash before action committed");
+        // 标记不确定的 action
+        for id in &uncertain_ids {
+            engine.record_action_uncertain(id, "crash before action committed");
         }
 
         // 设置状态为 AwaitingModel，让调用者继续
