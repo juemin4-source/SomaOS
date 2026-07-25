@@ -18,6 +18,7 @@ use soma_capability::organ::{FileOrgan, GitOrgan, ProcessOrgan};
 use soma_capability::registry::CapabilityRegistry;
 use soma_core::combo::registry::ComboRegistry;
 use soma_core::combo::review::review_combo;
+use soma_core::combo::investigate::investigate_combo;
 use soma_core::policy::*;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::claim::{AdjudicationStatus, Claim, ClaimAdjudicator, ClaimType};
@@ -570,6 +571,7 @@ async fn simulate_f6(fixture: &PathBuf, ev: &mut EvidenceTracker) {
 fn build_combo_registry() -> ComboRegistry {
     let mut reg = ComboRegistry::new();
     reg.register(review_combo());
+    reg.register(investigate_combo());
     reg
 }
 
