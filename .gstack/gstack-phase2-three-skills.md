@@ -315,25 +315,27 @@ ship.preflight → ship.merge → ship.build → ship.test
 
 ## 五、第一个 SomaOS 原生化切片建议
 
-### 建议：Review Finding 处理
+### 建议：Review Combo 完整原生化
 
-**理由：**
-1. 边界最清晰——输入是 Findngs 列表，输出是 PASS/FAIL/BLOCKED
-2. 涉及 Skill 间路由（review → 退回实施 / 允许 ship）
-3. 包含多个 Softill 候选（`change_scope.inspect`, `finding.classify`, `quality.gate_evaluate`）
-4. 跨 Skill 复用价值高（review + qa + ship 都需要）
-5. GATE-002 已有 Policy/Evidence 治理底座可复用
+**修订理由（V2 本体更新后）：**
+此前建议的 "Review Finding 处理" 和 "Soma 拿回路由、状态、门禁和证据" 仍然是把一个活生生的 Combo 切成治理薄片。
+现在更合理的是：第一批原生化对象直接是完整的 Review Combo。
 
-**不推荐的切片：**
-- 不切单一的 `change_scope.inspect`（虽然最干净，但无法验证系统的端到端工作）
-- 不切 /ship 的 Verification Gate（依赖 review 的产出）
+**第一版能力范围：**
+SomaOS 能够：
+1. **发现** review Combo — 知道它存在、解决什么问题
+2. **加载**它需要的 Skill（审阅方法、Scope Drift、Fix-First）
+3. **暴露并调用**它的 Softill（diff-scope、review-log、codex-probe）
+4. **接通** Git、File、Process Organ
+5. **执行**完整 Review 流程（从获取 diff 到产出 Findings）
+6. **接收** Findings 和 Gate Result
+7. **根据结果**继续修复或进入 Ship
 
-### 原生化方式：Hosted Native
-
-第一版保留 gstack 执行，SomaOS 负责：
-1. **路由控制** — Soma 决定当前是否应进入 review 阶段
-2. **状态保持** — Findings 列表、Scope Check 结果是 Soma 的工作对象
-3. **门禁裁决** — Soma 根据 Findings 判断是否允许进入 ship
-4. **证据链** — Findings 的产生和解决是 Evidence
-
+**技术方式：Hosted Native**
+第一版保留 gstack 文件与 bin 的执行，SomaOS 掌握编排控制。
 只有当某一 Softill 满足"不依赖 Claude Code 宿主也可执行"时，才考虑真正的 Native 实现。
+
+**这验证的是：**
+Skill + Softill + Organ → Combo → 解决真实研发工作
+
+而不是再次验证治理链。
