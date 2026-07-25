@@ -129,6 +129,29 @@
 
 ---
 
+## 0.8 — gstack 全研发链（Idea → Spec → Plan → Build → Review → QA → Ship）
+
+**目标：** SomaOS 能运行从需求澄清到实施、审阅、测试、交付和复盘的完整专业研发链。
+
+**主链 Combo（8 个）：**
+- office-hours（模糊想法 → 方向）
+- spec（范围与需求）
+- plan（实施方案）
+- plan-review（工程审查）
+- investigate（✅ 已有）
+- review（✅ 已有）
+- qa（验证行为）
+- ship（版本与交付）
+
+**核心交付物：**
+1. 8 个主链 Combo 全部注册
+2. 统一工作产物（Spec/Plan/Findings/Test Result/Release）
+3. 产物跨 Combo 自然传递，不人工复制
+4. 路由与回退（跳过、回退、阻塞）
+5. 一条真实 Dogfood（含阶段回退）
+
+---
+
 ## 0.9 — 日常产品化
 
 **目标：**
