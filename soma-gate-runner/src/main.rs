@@ -24,6 +24,8 @@ use soma_core::combo::office_hours::office_hours_combo;
 use soma_core::combo::spec::spec_combo;
 use soma_core::combo::plan::plan_combo;
 use soma_core::combo::plan_review::plan_review_combo;
+use soma_core::combo::qa::qa_combo;
+use soma_core::combo::ship::ship_combo;
 use soma_core::policy::*;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::claim::{AdjudicationStatus, Claim, ClaimAdjudicator, ClaimType};
@@ -582,6 +584,8 @@ fn build_combo_registry() -> ComboRegistry {
     reg.register(spec_combo());
     reg.register(plan_combo());
     reg.register(plan_review_combo());
+    reg.register(qa_combo());
+    reg.register(ship_combo());
     reg
 }
 
