@@ -112,6 +112,50 @@ pub fn qa_combo() -> Combo {
         "read-only",
     ));
 
+    // ── Vendored JS Script Softills ──
+
+    combo.softills.push(Softill {
+        id: "test-runner".into(),
+        name: "Test Runner".into(),
+        description: "Execute whitelisted test commands with timeout and security. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/test-runner/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Test command to execute"},
+                "cwd": {"type": "string", "description": "Working directory"},
+                "timeoutMs": {"type": "number", "description": "Timeout in milliseconds", "default": 30000},
+                "allowedCommands": {"type": "array", "items": {"type": "string"}, "description": "Command whitelist"}
+            },
+            "required": ["command"]
+        }),
+        output_description: "tests-passed | test-failure | execution-error | timeout | permission-blocked | environment-missing. Includes exitCode, durationMs, failures list, stdout/stderr preview.".into(),
+        effect: "write-local".into(),
+    });
+
+    combo.softills.push(Softill {
+        id: "verify".into(),
+        name: "Verify".into(),
+        description: "Verify task completion against contract and collect evidence. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/verify/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task ID to verify"},
+                "contract_path": {"type": "string", "description": "Path to the contract/spec"}
+            },
+            "required": ["task_id"]
+        }),
+        output_description: "Verification result with pass/fail verdict and evidence chain.".into(),
+        effect: "read-only".into(),
+    });
+
     combo.organ_dependencies = vec!["git".into(), "file".into(), "process".into(), "mcp".into()];
 
     combo.workflow = r#"质量验证流程
@@ -148,7 +192,7 @@ mod tests {
         assert_eq!(c.id, "qa");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
-        assert_eq!(c.softills.len(), 4);
+        assert_eq!(c.softills.len(), 6);
     }
 
     #[test]

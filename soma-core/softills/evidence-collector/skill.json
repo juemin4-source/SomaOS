@@ -1,0 +1,7 @@
+{
+  "name": "evidence-collector",
+  "description": "[产品] Collect and organize execution evidence",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

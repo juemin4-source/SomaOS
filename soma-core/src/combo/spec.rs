@@ -169,6 +169,46 @@ pub fn spec_combo() -> Combo {
         "read-only",
     ));
 
+    // ── Vendored JS Script Softills ──
+
+    combo.softills.push(Softill {
+        id: "context-extractor".into(),
+        name: "Context Extractor".into(),
+        description: "Extract minimal context slices from files for spec analysis. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/context-extractor/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "paths": {"type": "array", "items": {"type": "string"}, "description": "File paths to extract context from"},
+                "max_depth": {"type": "number", "description": "Directory traversal depth", "default": 3}
+            },
+            "required": ["paths"]
+        }),
+        output_description: "Context object with extracted file summaries, key symbols, and project structure notes.".into(),
+        effect: "read-only".into(),
+    });
+
+    combo.softills.push(Softill {
+        id: "project-profile-detector".into(),
+        name: "Project Profile Detector".into(),
+        description: "Detect project characteristics, language, build system, test framework. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/project-profile-detector/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "cwd": {"type": "string", "description": "Project root directory to analyze"}
+            }
+        }),
+        output_description: "Project profile: projectType, packageManager, testCommands, buildCommands, entryFiles, riskNotes.".into(),
+        effect: "read-only".into(),
+    });
+
     combo.organ_dependencies = vec!["git".into(), "file".into(), "mcp".into()];
 
     combo.workflow = r#"需求规格流程
@@ -211,7 +251,7 @@ mod tests {
         assert_eq!(c.id, "spec");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
-        assert_eq!(c.softills.len(), 4);
+        assert_eq!(c.softills.len(), 6);
     }
 
     #[test]

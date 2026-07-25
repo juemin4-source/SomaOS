@@ -129,6 +129,48 @@ pub fn ship_combo() -> Combo {
         "read-only",
     ));
 
+    // ── Vendored JS Script Softills ──
+
+    combo.softills.push(Softill {
+        id: "evidence-collector".into(),
+        name: "Evidence Collector".into(),
+        description: "Collect and organize execution evidence for release audit trail. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/evidence-collector/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "taskId": {"type": "string", "description": "Task identifier to collect evidence for"},
+                "evidence": {"type": "array", "items": {"type": "object"}, "description": "Evidence entries with type, result, summary, source"}
+            },
+            "required": ["taskId"]
+        }),
+        output_description: "Evidence receipt with collected audit trail, hash chain, and verification status.".into(),
+        effect: "write-local".into(),
+    });
+
+    combo.softills.push(Softill {
+        id: "verify".into(),
+        name: "Verify".into(),
+        description: "Verify task completion against contract and collect evidence. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/verify/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task ID to verify"},
+                "contract_path": {"type": "string", "description": "Path to the contract/spec to verify against"}
+            },
+            "required": ["task_id"]
+        }),
+        output_description: "Verification result with pass/fail verdict, evidence chain, and detailed check results.".into(),
+        effect: "read-only".into(),
+    });
+
     combo.organ_dependencies = vec!["git".into(), "file".into(), "process".into(), "mcp".into()];
 
     combo.workflow = r#"交付发布流程
@@ -170,7 +212,7 @@ mod tests {
         assert_eq!(c.id, "ship");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
-        assert_eq!(c.softills.len(), 4);
+        assert_eq!(c.softills.len(), 6);
     }
 
     #[test]

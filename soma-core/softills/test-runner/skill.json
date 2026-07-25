@@ -1,0 +1,7 @@
+{
+  "name": "test-runner",
+  "description": "[开发] Execute whitelisted test commands with timeout and security",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

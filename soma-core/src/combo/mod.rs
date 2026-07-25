@@ -24,3 +24,4 @@ pub mod work_state;
 pub mod pipeline;
 pub mod pipeline_display;
 pub mod routing;
+pub mod figma;

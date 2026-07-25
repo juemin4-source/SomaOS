@@ -39,6 +39,17 @@ pub enum SoftillInvocation {
         path: String,
         interpreter: String,
     },
+    /// HTTP API（REST / GraphQL 等外部服务）
+    HttpApi {
+        /// 请求 URL（支持模板变量，如 https://api.figma.com/v1/files/{file_key}）
+        url_template: String,
+        /// HTTP 方法
+        method: String,
+        /// 请求头模板
+        headers: Vec<(String, String)>,
+        /// 请求体模板（可选）
+        body_template: Option<String>,
+    },
 }
 
 impl Softill {

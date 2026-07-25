@@ -121,6 +121,26 @@ pub fn project_takeover_combo() -> Combo {
         "read-only",
     ));
 
+    // ── Vendored JS Script Softills ──
+
+    combo.softills.push(Softill {
+        id: "project-profile-detector".into(),
+        name: "Project Profile Detector".into(),
+        description: "Detect project language, build system, test framework for takeover assessment. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/project-profile-detector/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "cwd": {"type": "string", "description": "Project root directory to analyze"}
+            }
+        }),
+        output_description: "Project profile with projectType, packageManager, testCommands, buildCommands, entryFiles, riskNotes.".into(),
+        effect: "read-only".into(),
+    });
+
     combo.organ_dependencies = vec!["git".into(), "file".into(), "mcp".into()];
 
     combo.workflow = r#"Project Takeover Workflow
@@ -159,7 +179,7 @@ mod tests {
         assert_eq!(c.id, "project-takeover");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
-        assert_eq!(c.softills.len(), 4);
+        assert_eq!(c.softills.len(), 5);
     }
 
     #[test]

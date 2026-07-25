@@ -1,0 +1,7 @@
+{
+  "name": "context-extractor",
+  "description": "[产品] Extract minimal context slices from files",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

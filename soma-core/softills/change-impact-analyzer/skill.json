@@ -1,0 +1,7 @@
+{
+  "name": "change-impact-analyzer",
+  "description": "[开发] Analyze impact of proposed changes",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -31,15 +31,15 @@
 
 | Combo | ID | Softills | 状态 |
 |-------|-----|---------|------|
-| 产品方向诊断 | office-hours | 3（MCP） | ✅ 已绑定 |
-| 需求规格 | spec | 4（MCP） | ✅ 已绑定 |
-| 实施计划 | plan | 4（MCP） | ✅ 已绑定 |
-| 方案审阅 | plan-review | 4（MCP） | ✅ 已绑定 |
-| 调查 | investigate | 6（MCP + gstack） | ✅ 已有 |
-| 代码审阅 | review | 8（MCP + gstack + JS） | ✅ 已有 |
-| 质量验证 | qa | 4（MCP） | ✅ 已绑定 |
-| 交付发布 | ship | 4（MCP） | ✅ 已绑定 |
-| 项目接管 | project-takeover | 4（MCP） | ✅ 已有 |
+| 产品方向诊断 | office-hours | 3（MCP） | ✅ |
+| 需求规格 | spec | 6（MCP + vendored JS） | ✅ 旧资产接入 |
+| 实施计划 | plan | 5（MCP + vendored JS） | ✅ 旧资产接入 |
+| 方案审阅 | plan-review | 5（MCP + vendored JS） | ✅ 旧资产接入 |
+| 调查 | investigate | 6（MCP + gstack） | ✅ |
+| 代码审阅 | review | 8（MCP + gstack + JS） | ✅ |
+| 质量验证 | qa | 6（MCP + vendored JS） | ✅ 旧资产接入 |
+| 交付发布 | ship | 6（MCP + vendored JS） | ✅ 旧资产接入 |
+| 项目接管 | project-takeover | 5（MCP + vendored JS） | ✅ 旧资产接入 |
 
 ## 架构关键决策
 

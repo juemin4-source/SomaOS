@@ -128,6 +128,29 @@ pub fn plan_combo() -> Combo {
         "read-only",
     ));
 
+    // ── Vendored JS Script Softills ──
+
+    combo.softills.push(Softill {
+        id: "change-impact-analyzer".into(),
+        name: "Change Impact Analyzer".into(),
+        description: "Analyze impact of proposed changes across files, APIs, components, and DB models. (vendored JS handler)".into(),
+        invocation: SoftillInvocation::Script {
+            path: "soma-core/softills/change-impact-analyzer/handler.mjs".into(),
+            interpreter: "node".into(),
+        },
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "files": {"type": "array", "items": {"type": "string"}, "description": "Changed or affected file paths"},
+                "api_endpoints": {"type": "array", "items": {"type": "string"}, "description": "API endpoints involved"},
+                "components": {"type": "array", "items": {"type": "string"}, "description": "Components affected"}
+            },
+            "required": ["files"]
+        }),
+        output_description: "Impact analysis with affected areas, risk level assessment, and dependency chain.".into(),
+        effect: "read-only".into(),
+    });
+
     combo.organ_dependencies = vec!["git".into(), "file".into(), "mcp".into()];
 
     combo.workflow = r#"实施计划流程
@@ -167,7 +190,7 @@ mod tests {
         assert_eq!(c.id, "plan");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
-        assert_eq!(c.softills.len(), 4);
+        assert_eq!(c.softills.len(), 5);
     }
 
     #[test]

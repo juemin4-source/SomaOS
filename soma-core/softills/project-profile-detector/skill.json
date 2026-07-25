@@ -1,0 +1,7 @@
+{
+  "name": "project-profile-detector",
+  "description": "[开发] Detect project characteristics and stack",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "verify",
+  "description": "[产品] Verify task completion and collect evidence",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}
