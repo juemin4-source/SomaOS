@@ -1,212 +1,140 @@
-# SomaOS Handoff — 2026-07-25 (Session 2)
+# SomaOS Handoff — 2026-07-25 (Session 3)
 
-> **会话终点:** HTTP 模式完成 + CLI 修复 + Spike 调研完成 + 架构路线确认
-> **下一目标:** 基于 Ratatui 构建 SomaOS TUI，以 Codex TUI 为参考
+> **会话终点:** Step 1-4 完成 + 零 warning + TUI 可运行
+> **下一目标:** Step 5 实验验证（长输出截断、Diff、审批、跨会话恢复）
 
 ---
 
 ## 项目状态
 
-```
-0.2  执行内核                    ✅
-0.3  Review Combo               ✅
-0.5  Investigate → Fix → Review ✅
-0.7  项目接管与连续性             ✅
-0.8  完整研发主链（A-E）          ✅
-0.85 Softill 开放与生长（A-C）    ✅
-0.9  Desktop 地基                ⬜ 当前推进中（方向修正）
-1.0  日常可用                    ⬜
-```
-
-## 本轮完成
-
-### 基础设施
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| **EventSink → notification 适配** | ✅ | `NotificationEventSink` 将 RuntimeEventEnvelope 写为 `task/event` notification |
-| **TurnEngine 连入 task/send_message** | ✅ | `run_task_turn()` 异步执行，流式事件通过 EventSink 推送 |
-| **TaskManager** | ✅ | `complete_turn()`/`fail_turn()`/`active_turn_id()` 方法 |
-| **集成测试** | ✅ | `soma-runtime/tests/vertical_slice.rs` — E2E AI 执行 + 取消 |
-| **前端测试 (vitest)** | ✅ | 19 tests (eventReducer + Conversation + Composer) |
-| **TESTING.md** | ✅ | 测试体系文档 |
-
-### HTTP 模式（新）
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| `soma-runtime --http PORT` | ✅ | axum HTTP 服务器 |
-| `POST /api` | ✅ | JSON-RPC 处理器（复用 --stdio handler） |
-| `GET /api/events` | ✅ | SSE 事件流（broadcast channel） |
-| `BroadcastNotificationSink` | ✅ | 同时写 stdout + broadcast |
-| 前端 `commands.ts` → fetch | ✅ | 从 Tauri invoke 改为 HTTP POST |
-| 前端 `events.ts` → EventSource | ✅ | 从 Tauri event 改为 SSE |
-| 前端 build (`soma-desktop/dist/`) | ✅ | Vite build 生产包 |
-
-### CLI 修复
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| `soma-client send_request` | ✅ | 自动跳过中间通知，等匹配 id 的响应 |
-| `soma-cli investigate` | ✅ | 从旧 case/run 协议改为 task 协议 |
-| 流式事件显示 | ✅ | AssistantDelta 实时打印 |
-
-### Design Tokens
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| Figma API 提取 | ✅ | 从 "Spatial Workbench" 提取精确色值 |
-| `.gstack/design-tokens.md` | ✅ | 存档设计 tokens |
-| CSS 更新 | ✅ | 全部 8 色值 + typography 层级 + 布局 |
-
-### 前端页面（Figma 对齐，部分假数据）
-
-| 页面 | 状态 | 后端连接 |
-|------|------|---------|
-| Home (Mode Grid + Hero + Recent) | ✅ | ❌ 假数据 |
-| Workspace (Conversation + Composer) | ✅ | ✅ 真实对话 |
-| Task Summary Drawer | ✅ | ❌ 假数据 |
-| Changes Diff View | ✅ | ❌ 假数据 |
-| Sidebar (Quick Nav + Project) | ✅ | ⚠️ 任务列表真实，导航假的 |
-
-### Codex CLI 深度调研
-
-完成了 Codex CLI 架构调研：
-
-- **代码**: `soma-cli-spike/codex/`（完整 clone，Apache 2.0）
-- **结构**: 80+ Rust crates，核心在 `codex-rs/app-server/`
-- **关键抽象**:
-  - `ModelProvider` trait — 已有 chatgpt/ollama/lmstudio 三种实现
-  - `HttpTransport` trait — HTTP 调用抽象（`ReqwestTransport` 实现）
-  - `ResponsesClient::stream_request()` — 实际的 AI 调用入口
-- **耦合**: 使用 OpenAI Responses API 格式，不兼容 Soma 协议
-
-## 关键架构决策（最后达成的共识）
-
-### 最终路线
+### 里程碑
 
 ```
-Ratatui (渲染底座)
-    ↓ 调 soma-client
-soma-client (JSON-RPC)
-    ↓
-soma-runtime (AI 执行)
-    ├── EventSink → SSE/stdio
-    ├── TaskManager
-    ├── WorkState / Artifact
-    └── Combo / Softill
+0.8  soma-ui-protocol    ✅  Step 1
+0.85 渲染底座 + tail()   ✅  Step 2
+0.9  Runtime 连接        ✅  Step 3
+0.95 核心交互             ✅  Step 4
+0.97 长输出截断            ✅  Step 5a
+0.98 Diff 显示             ✅  Step 5b
+1.0  日常可用             ⬜  Step 5 (审批/跨会话恢复)
 ```
 
-### 决策理由
-
-1. **不 fork Codex CLI** — 其架构深度耦合 OpenAI Responses API，替换成本高于自建
-2. **不重新造终端基建** — Ratatui 提供输入编辑、渲染循环、键盘事件等成熟组件
-3. **参考 Codex TUI** — 看它的交互模式、组件拆分、事件循环结构，选择性移植
-4. **Soma Runtime 是核心价值** — Task、Combo、WorkState、Artifact、Findings 是自己的
-
-### 被否定的方案
-
-- ~~直接继承 `soma-cli` 加 REPL~~ — 体验追不上 Claude Code / Codex
-- ~~fork Codex CLI 换 provider~~ — Responses API 深度耦合
-- ~~继续 React + Tauri 桌面~~ — 这个环境不可测，且用户首选 CLI
-- ~~ShellGPT adapter~~ — Python sidecar 长期不如 Rust 原生
-
-## 已知缺口（待推进）
-
-### P0 — TUI 最小可行
+### 测试
 
 ```
-[ ] 基于 Ratatui 创建 soma-tui crate
-[ ] 参考 Codex TUI (codex-rs/tui/) 的组件结构
-[ ] 输入行 + 对话历史 + 流式输出显示
-[ ] 通过 soma-client 连接 runtime
-[ ] AssistantDelta / ToolCall / TurnCompleted 事件展示
+全 workspace: ~300+ passed ✅
+├─ soma-ui-protocol:  10  ✅
+├─ soma-tui:          31  ✅  (app:15 + cells:7 + runtime:9)
+└─ 其他:             ~260 ✅
 ```
 
-### P1 — TUI 功能完整
+编译 warning: **soma-ui-protocol + soma-tui = 0**（其余旧 crate 共 20 个遗留 warning）
+
+---
+
+## 架构
 
 ```
-[ ] 多轮对话（同 task 内连续 send_message）
-[ ] Ctrl+C 中断 → task/cancel
-[ ] WorkState 展示
-[ ] Artifact 展示
-[ ] Findings 展示
-[ ] 彩色 Markdown 输出
+soma-tui (eye_declare App)
+  ├── RuntimeClient → soma-runtime --stdio (子进程)
+  │   ├── send_message_fire_and_forget()  ← 用户输入
+  │   ├── cancel_fire_and_forget()        ← Ctrl+C
+  │   └── spawn_event_reader() → UiEvent 流
+  │
+  ├── SomaTuiModel
+  │   ├── CellBuffer (committed + active cells)
+  │   ├── TextAreaState (输入区)
+  │   └── apply_ui_event() → CellBuffer 填充
+  │
+  └── tail() → eye_declare Elements
+      ├── cells → markdown() / text() 渲染
+      ├── spinner / overlay
+      ├── input bar
+      └── status line
 ```
 
-### P2 — 桌面/其他
+---
+
+## 创建的文件
 
 ```
-[ ] Tauri 桌面打包（用现有 React 前端）
-[ ] 编辑器集成（以后再说）
+soma-ui-protocol/                    (crate)
+├── Cargo.toml
+└── src/
+    ├── lib.rs
+    ├── ui_event.rs      — UiEvent (15 kinds) + UiCommand
+    └── cell_buffer.rs   — CellBuffer + Cell + CellKind + CellState
+
+soma-tui/                           (crate)
+├── Cargo.toml
+└── src/
+    ├── lib.rs
+    ├── main.rs          — driver_tokio::run_with() + Runtime init
+    ├── app.rs           — SomaTuiApp + SomaTuiModel + render_cell_element
+    ├── cells/mod.rs     — CellKind → 文本投影（参考实现 + 测试）
+    └── runtime.rs       — RuntimeClient + 事件转换 + spawn_event_reader
+
+TUI-DESIGN.md           架构设计文档
 ```
+
+## 会话 3 变更摘要
+
+- 创建 `soma-ui-protocol` crate（UiEvent 类型 + CellBuffer）
+- 创建 `soma-tui` crate（eye_declare App + RuntimeClient）
+- 实现 Runtime 连接（子进程管理、JSON-RPC、事件流）
+- 实现 CellBuffer 接线（事件 → cell 填充）
+- 实现 cells 渲染（markdown + tool call + 状态指示器）
+- 清理死代码（adapter.rs 删除、未使用函数、零 warning）
+- **41 测试全部通过 | 编译 warning = 0**
 
 ## 关键文件位置
 
 ```
-soma-runtime/src/
-├── main.rs                 # 双模式启动（--stdio / --http）
-├── event_adapter.rs        # BroadcastNotificationSink
-├── http_server.rs          # axum HTTP + SSE
-├── task_manager.rs         # TaskManager (complete/fail/active_turn)
-└── tests/vertical_slice.rs # E2E 集成测试
+soma-ui-protocol/src/
+├── ui_event.rs           # 15 种 UiEventKind + CellBuffer 数据模型
+├── cell_buffer.rs        # Cell 状态机 + 公共操作方法
 
-soma-client/src/
-├── client.rs               # StdioClient (send_request 跳过通知)
-
-soma-cli/src/
-└── main.rs                 # CLI (investigate 用 task 协议)
-
-soma-desktop/
-├── src/
-│   ├── App.tsx             # 多页面路由（Home/Workspace/Changes）
-│   ├── pages/              # 页面组件
-│   ├── features/           # Conversation / Composer / TaskSidebar
-│   ├── runtime/
-│   │   ├── commands.ts     # HTTP fetch
-│   │   ├── events.ts       # SSE EventSource
-│   │   └── eventReducer.ts # 事件→状态归约
-│   └── app/styles.css      # 真实 Figma design tokens
-└── dist/                   # 构建产物（可直接 serve）
-
-soma-cli-spike/
-└── codex/                  # Codex CLI 完整 clone（参考用）
-
-.gstack/
-├── design-tokens.md        # Figma 设计 token 存档
-└── desktop-0.9-*.md        # 设计文档
-
-TESTING.md                  # 测试体系文档
+soma-tui/src/
+├── main.rs               # 异步入口 + Runtime 初始化
+├── app.rs                # eye_declare::App impl + 状态机
+│   ├── init()           → spawn 事件流
+│   ├── update()         → 处理 Msg::UiEventReceived / SubmitInput / CtrlC
+│   ├── tail()           → 渲染 CellBuffer + 输入区 + 状态
+│   └── render_cell_element() → CellKind 投影为 Element
+│
+├── runtime.rs            # Runtime 子进程通信层
+│   ├── RuntimeClient    → 进程管理 + 发送请求
+│   ├── runtime_event_to_ui() → RuntimeEvent → UiEvent
+│   └── spawn_event_reader() → 后台读取 stdout → mpsc channel
+│
+└── cells/mod.rs          # CellKind 投影参考（供测试验证）
 ```
 
-## 测试状态
+## 启动方式
 
-```
-全 workspace: ~200 passed ✅
-├─ soma-core:     129 ✅
-├─ soma-protocol:  14 ✅
-├─ soma-runtime:   13 + 2 integration ✅
-├─ soma-desktop:   19 vitest ✅
-└─ 其他:           ~30 ✅
-```
+### 1. 配置 API key
 
-## 下次启动
-
-1. 读本 HANDOFF.md 恢复上下文
-2. 安装 Ratatui (`cargo add ratatui`)
-3. 创建 `soma-tui/` crate
-4. 参考 `codex-rs/tui/` 的组件结构
-5. 实现最小交互循环：输入 → `soma-client` → 流式显示
-6. 验收：`soma-tui` 启动 → 输入问题 → AI 流式回答 → 显示 ToolCall
-
-## 本地配置（不提交）
+在项目根目录创建 `.somaos/env.json`（不提交到 git）：
 
 ```json
-.somaos/env.json:
 {
-  "figma_token": "figd_...",
-  "figma_file_key": "2ISwgYFvBb7QDEDbp3VIk9"
+  "deepseek_api_key": "sk-..."
 }
 ```
 
-API key: `DEEPSEEK_API_KEY` 或 `ANTHROPIC_API_KEY`
+或用环境变量：
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+支持 `deepseek_api_key`（DeepSeek）和 `anthropic_api_key`（Anthropic Claude）两种。
+
+### 2. 运行
+
+```bash
+cd G:/AI/Claude-Workspace/Projects/SomaOS-Next
+cargo run -p soma-tui
+```
+
+TUI 自动 spawn `soma-runtime --stdio` 子进程，创建 task 并显示输入界面。
+按 Enter 提交输入，Ctrl+C 取消/退出，Ctrl+D 直接退出。

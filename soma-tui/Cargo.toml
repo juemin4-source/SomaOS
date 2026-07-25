@@ -1,0 +1,39 @@
+[package]
+name = "soma-tui"
+version = "0.1.0"
+edition = "2021"
+description = "SomaOS TUI — inline terminal UI for Soma Runtime"
+
+[[bin]]
+name = "soma-tui"
+path = "src/main.rs"
+
+[dependencies]
+# Core
+soma-ui-protocol = { path = "../soma-ui-protocol" }
+# Runtime 协议 + 多路复用客户端
+soma-protocol = { path = "../soma-protocol" }
+soma-client = { path = "../soma-client" }
+
+# TUI rendering base (spike phase — swap to bare Ratatui if needed)
+eye_declare = "0.6"
+eye_declare_engine = "0.6"
+crossterm = "0.29"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "process", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Errors
+anyhow = "1"
+thiserror = "1"
+
+# Utilities
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+pin-project = "1.1.13"
+futures-core = "0.3.33"

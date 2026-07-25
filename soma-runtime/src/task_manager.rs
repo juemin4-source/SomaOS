@@ -8,6 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use soma_protocol::params::{TaskSummary, TaskCreateResult, TaskGetResult, TaskSendMessageResult, TaskCancelResult};
+use soma_store::sqlite::SqliteCaseStore;
+use soma_store::task_store::{TaskRecord, upsert_task, load_all_tasks};
+use tokio::task::JoinHandle;
 
 /// 任务状态
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +44,8 @@ pub struct Task {
     pub work_state: Option<serde_json::Value>,
     pub artifacts: Vec<serde_json::Value>,
     pub active_turn_id: Option<String>,
+    /// 对话历史（交替 user/assistant 消息）
+    pub conversation: Vec<(String, String)>, // (role, content)
 }
 
 impl Task {
@@ -56,6 +61,7 @@ impl Task {
             work_state: None,
             artifacts: Vec::new(),
             active_turn_id: None,
+            conversation: Vec::new(),
         }
     }
 
@@ -70,10 +76,17 @@ impl Task {
     }
 }
 
-/// 任务管理器
+/// 任务管理器（可选 SQLite 持久化）
 pub struct TaskManager {
     tasks: HashMap<String, Task>,
     next_id: u64,
+    store: Option<Arc<SqliteCaseStore>>,
+    /// 活跃模型请求的 abort 句柄，用于真取消
+    abort_handles: HashMap<String, tokio::task::JoinHandle<()>>,
+    /// 取消信号通道发送端
+    cancel_signals: HashMap<String, tokio::sync::watch::Sender<bool>>,
+    /// 审批等待通道（approval_id → oneshot 回复）
+    approval_waiters: HashMap<String, tokio::sync::oneshot::Sender<bool>>,
 }
 
 impl TaskManager {
@@ -81,6 +94,60 @@ impl TaskManager {
         Self {
             tasks: HashMap::new(),
             next_id: 1,
+            store: None,
+            abort_handles: HashMap::new(),
+            cancel_signals: HashMap::new(),
+            approval_waiters: HashMap::new(),
+        }
+    }
+
+    /// 绑定持久化存储
+    pub fn with_store(mut self, store: Arc<SqliteCaseStore>) -> Self {
+        // 启动时从 SQLite 加载已有任务
+        if let Ok(records) = load_all_tasks(&store.connection()) {
+            for rec in records {
+                let id_num: u64 = rec.id.strip_prefix("task-")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                self.next_id = self.next_id.max(id_num + 1);
+                let task = Task {
+                    id: rec.id,
+                    title: rec.title,
+                    status: match rec.status.as_str() {
+                        "running" => TaskStatus::Running,
+                        "completed" => TaskStatus::Completed,
+                        "interrupted" => TaskStatus::Interrupted,
+                        _ => TaskStatus::Idle,
+                    },
+                    project_root: rec.project_root,
+                    created_at: rec.created_at,
+                    updated_at: rec.updated_at,
+                    work_state: rec.work_state.and_then(|s| serde_json::from_str(&s).ok()),
+                    artifacts: Vec::new(),
+                    active_turn_id: rec.active_turn_id,
+                    conversation: Vec::new(),
+                };
+                self.tasks.insert(task.id.clone(), task);
+            }
+        }
+        self.store = Some(store);
+        self
+    }
+
+    /// 持久化当前状态到 SQLite
+    fn persist(&self, task: &Task) {
+        if let Some(ref store) = self.store {
+            let record = TaskRecord {
+                id: task.id.clone(),
+                title: task.title.clone(),
+                status: task.status.as_str().to_string(),
+                project_root: task.project_root.clone(),
+                created_at: task.created_at.clone(),
+                updated_at: task.updated_at.clone(),
+                work_state: task.work_state.as_ref().map(|v| v.to_string()),
+                active_turn_id: task.active_turn_id.clone(),
+            };
+            let _ = upsert_task(&store.connection(), &record);
         }
     }
 
@@ -89,6 +156,7 @@ impl TaskManager {
         let task_id = format!("task-{}", self.next_id);
         self.next_id += 1;
         let task = Task::new(&task_id, title, project_root);
+        self.persist(&task);
         self.tasks.insert(task_id.clone(), task);
         TaskCreateResult { task_id }
     }
@@ -129,6 +197,10 @@ impl TaskManager {
         task.status = TaskStatus::Running;
         task.active_turn_id = Some(turn_id.clone());
         task.updated_at = timestamp();
+        let task_id = task_id.to_string();
+        if let Some(t) = self.tasks.get(&task_id) {
+            self.persist(t);
+        }
 
         Ok(TaskSendMessageResult {
             task_id: task_id.to_string(),
@@ -149,14 +221,75 @@ impl TaskManager {
             });
         }
 
+        // 真取消：通过 watch channel 通知正在执行的模型请求
+        if let Some(tx) = self.cancel_signals.remove(task_id) {
+            let _ = tx.send(true);
+        }
+        // 同时也 abort tokio task（双重保障）
+        if let Some(handle) = self.abort_handles.remove(task_id) {
+            handle.abort();
+        }
+
         task.status = TaskStatus::Interrupted;
         task.active_turn_id = None;
         task.updated_at = timestamp();
+        let task_id = task_id.to_string();
+        if let Some(t) = self.tasks.get(&task_id) {
+            self.persist(t);
+        }
 
         Ok(TaskCancelResult {
             task_id: task_id.to_string(),
             cancelled: true,
         })
+    }
+
+    /// 获取任务对话历史
+    pub fn get_conversation(&self, task_id: &str) -> Vec<(String, String)> {
+        self.tasks.get(task_id)
+            .map(|t| t.conversation.clone())
+            .unwrap_or_default()
+    }
+
+    /// 替换整个对话历史
+    pub fn set_conversation(&mut self, task_id: &str, conv: Vec<(String, String)>) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.conversation = conv;
+            task.updated_at = timestamp();
+        }
+    }
+
+    /// 追加一条对话记录
+    pub fn append_conversation(&mut self, task_id: &str, role: &str, content: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.conversation.push((role.to_string(), content.to_string()));
+            task.updated_at = timestamp();
+        }
+    }
+
+    /// 注册模型请求的 JoinHandle（用于取消）
+    pub fn register_abort_handle(&mut self, task_id: &str, handle: JoinHandle<()>) {
+        self.abort_handles.insert(task_id.to_string(), handle);
+    }
+
+    /// 注册取消信号发送端
+    pub fn register_cancel(&mut self, task_id: &str, tx: tokio::sync::watch::Sender<bool>) {
+        self.cancel_signals.insert(task_id.to_string(), tx);
+    }
+
+    /// 注册审批等待通道（等待用户决策）
+    pub fn register_approval(&mut self, approval_id: &str, tx: tokio::sync::oneshot::Sender<bool>) {
+        self.approval_waiters.insert(approval_id.to_string(), tx);
+    }
+
+    /// 解析审批请求（返回 true=批准, false=拒绝或不存在）
+    pub fn resolve_approval(&mut self, approval_id: &str, approved: bool) -> bool {
+        if let Some(tx) = self.approval_waiters.remove(approval_id) {
+            let _ = tx.send(approved);
+            true
+        } else {
+            false
+        }
     }
 
     /// 获取活跃任务的 task_id（如果有）
@@ -195,6 +328,10 @@ impl TaskManager {
             task.active_turn_id = None;
             task.updated_at = timestamp();
         }
+        // 通过 clone 避免 borrow conflict
+        if let Some(task) = self.tasks.get(task_id) {
+            self.persist(task);
+        }
     }
 
     /// Turn 失败（标记为 Idle 以便后续重试）
@@ -203,6 +340,9 @@ impl TaskManager {
             task.status = TaskStatus::Idle;
             task.active_turn_id = None;
             task.updated_at = timestamp();
+        }
+        if let Some(task) = self.tasks.get(task_id) {
+            self.persist(task);
         }
     }
 }

@@ -11,5 +11,7 @@ members = [
     "soma-runtime",
     "soma-gate-runner",
     "soma-desktop/src-tauri",
+    "soma-ui-protocol",
+    "soma-tui",
 ]
 resolver = "2"

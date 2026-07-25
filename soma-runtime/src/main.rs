@@ -183,33 +183,37 @@ fn build_registry(repo_root: PathBuf) -> CapabilityRegistry {
     p_contract.reversibility = Reversibility::ConditionalReversibility;
     registry.register_arc(p_contract, process_organ);
 
-    let git_organ = Arc::new(GitOrgan::new(repo_root)) as Arc<dyn soma_capability::organ::Organ>;
-    for entry in [
+    let git_organ_status = Arc::new(GitOrgan::new(repo_root.clone(), "status")) as Arc<dyn soma_capability::organ::Organ>;
+    let git_organ_diff = Arc::new(GitOrgan::new(repo_root.clone(), "diff")) as Arc<dyn soma_capability::organ::Organ>;
+    let git_organ_log = Arc::new(GitOrgan::new(repo_root, "log")) as Arc<dyn soma_capability::organ::Organ>;
+
+    let entries: Vec<(&str, &str, serde_json::Value, Arc<dyn soma_capability::organ::Organ>)> = vec![
         ("git_status", "查看 git 仓库状态（dirty 文件、暂存区）", serde_json::json!({
             "type": "object",
-            "properties": {"action": {"const": "status"}},
-            "required": ["action"]
-        })),
+            "properties": {"action": {"type": "string", "description": "固定为 status"}},
+            "required": []
+        }), git_organ_status),
         ("git_diff", "查看 git diff（工作树与 HEAD 的差异）", serde_json::json!({
             "type": "object",
             "properties": {
-                "action": {"const": "diff"},
+                "action": {"type": "string", "description": "固定为 diff"},
                 "path": {"type": "string", "description": "指定文件路径（可选）"}
             },
-            "required": ["action"]
-        })),
+            "required": []
+        }), git_organ_diff),
         ("git_log", "查看 git 提交日志", serde_json::json!({
             "type": "object",
             "properties": {
-                "action": {"const": "log"},
+                "action": {"type": "string", "description": "固定为 log"},
                 "max_count": {"type": "integer", "description": "最大提交数（默认 10）"}
             },
-            "required": ["action"]
-        })),
-    ] {
+            "required": []
+        }), git_organ_log),
+    ];
+    for (name, desc, schema, organ) in entries {
         registry.register_arc(
-            CapabilityContract::basic(entry.0, entry.1, EffectClass::ReadOnly, entry.2),
-            git_organ.clone(),
+            CapabilityContract::basic(name, desc, EffectClass::ReadOnly, schema),
+            organ,
         );
     }
     registry
@@ -498,13 +502,29 @@ async fn run_task_turn(
         return;
     }
 
-    // 2. 构建 TurnEngine
+    // 2. 构建 TurnEngine（携带对话历史）
     let mut engine = TurnEngine::new(provider, task_id.clone());
+    let conv = state.task_manager.lock().unwrap().get_conversation(&task_id);
+    engine.with_conversation(conv);
     let tools = state.registry.tool_definitions();
     engine.start(&input, tools);
 
-    // 3. 第一轮模型请求
-    let (text, tool_call) = match engine.request_model().await {
+    // 取消信号：watch channel，task/cancel 时发送 true
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    let cancel_rx_clone = cancel_rx.clone();
+    // 存到 TaskManager 供 handle_task_cancel 触发
+    state.task_manager.lock().unwrap().register_cancel(&task_id, cancel_tx);
+
+    let (text, tool_call) = match engine.request_model_with_delta(
+        |delta| {
+            emit(AssistantDelta, serde_json::json!({"text": delta}));
+        },
+        async move {
+            let mut rx = cancel_rx_clone;
+            // 等待 cancel 或 channel 关闭
+            rx.changed().await.ok();
+        },
+    ).await {
         Ok(result) => result,
         Err(e) => {
             emit(TurnFailed, serde_json::json!({"error": e}));
@@ -522,12 +542,8 @@ async fn run_task_turn(
     // 4. 处理工具调用或直接结论
     match tool_call {
         Some(tc) => {
-            // 发出助手文字
-            if !text.is_empty() {
-                emit(AssistantDelta, serde_json::json!({"text": text}));
-            }
-
-            // 发出工具开始事件
+            // 注意：助手文字已经在 request_model_with_delta 中流式发出
+            // 这里只发出工具开始事件
             emit(ToolStarted, serde_json::json!({
                 "tool_call_id": &tc.name,
                 "capability_id": &tc.name,
@@ -547,8 +563,43 @@ async fn run_task_turn(
                     format!("请求被拒绝: {}", reason)
                 }
                 PolicyDecision::NeedsOwner { reason } => {
-                    engine.record_permission_denied(&tc.name, reason);
-                    format!("需要用户授权（runtime 自动拒绝）: {}", reason)
+                    // 创建审批通道
+                    let (approve_tx, approve_rx) = tokio::sync::oneshot::channel::<bool>();
+                    let approval_id = format!("apr-{}-{}", task_id, tc.name);
+
+                    // 注册到 TaskManager
+                    state.task_manager.lock().unwrap()
+                        .register_approval(&approval_id, approve_tx);
+
+                    // 发出审批请求事件
+                    emit(ApprovalRequested, serde_json::json!({
+                        "approval_id": approval_id,
+                        "prompt": format!("{} — {}", reason, tc.name),
+                        "timeout_ms": 30000,
+                    }));
+
+                    // 等待用户决策（带超时）
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(30),
+                        approve_rx,
+                    ).await;
+
+                    match result {
+                        Ok(Ok(true)) => {
+                            // 用户批准 → 执行工具
+                            execute_capability(&mut engine, &state.registry, &tc.name, tc.arguments.clone()).await
+                        }
+                        Ok(Ok(false)) | Ok(Err(_)) => {
+                            // 用户拒绝或通道关闭
+                            engine.record_permission_denied(&tc.name, reason);
+                            format!("用户拒绝了操作: {}", reason)
+                        }
+                        Err(_) => {
+                            // 超时
+                            engine.record_permission_denied(&tc.name, reason);
+                            format!("审批超时: {}", reason)
+                        }
+                    }
                 }
             };
 
@@ -571,13 +622,19 @@ async fn run_task_turn(
                 tracing::warn!(task_id = %task_id, error = %e, "Failed to provide observation to engine");
             }
 
-            // 第二轮模型请求
-            match engine.continue_turn().await {
+            // 第二轮模型请求（流式）
+            let cancel_rx2 = cancel_rx.clone();
+            match engine.continue_turn_with_delta(
+                |delta| {
+                    emit(AssistantDelta, serde_json::json!({"text": delta}));
+                },
+                async move {
+                    let mut rx = cancel_rx2;
+                    rx.changed().await.ok();
+                },
+            ).await {
                 Ok((cont_text, _)) => {
                     engine.finish(&cont_text);
-                    if !cont_text.is_empty() {
-                        emit(AssistantDelta, serde_json::json!({"text": cont_text}));
-                    }
                     emit(TurnCompleted, serde_json::json!({"outcome": cont_text}));
                     state.task_manager.lock().unwrap().complete_turn(&task_id);
                 }
@@ -588,13 +645,16 @@ async fn run_task_turn(
             }
         }
         None => {
-            // 模型直接给出结论
+            // 模型直接给出结论（文字已在流式中发出）
             engine.finish(&text);
-            emit(AssistantDelta, serde_json::json!({"text": text}));
             emit(TurnCompleted, serde_json::json!({"outcome": text}));
             state.task_manager.lock().unwrap().complete_turn(&task_id);
         }
     }
+
+    // 保存对话历史
+    let conv = engine.conversation();
+    state.task_manager.lock().unwrap().set_conversation(&task_id, conv);
 }
 
 async fn handle_cancel(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, output: &Arc<OutputWriter>) -> RunResult {
@@ -904,9 +964,64 @@ pub(crate) fn handle_task_cancel(params: serde_json::Value, state: &Arc<AppState
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
+pub(crate) fn handle_task_approve(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let approval_id = params.get("approval_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'approval_id' field".to_string())?;
+
+    let found = state.task_manager.lock().unwrap()
+        .resolve_approval(approval_id, true);
+
+    Ok(serde_json::json!({
+        "resolved": found,
+        "approved": true,
+    }))
+}
+
+pub(crate) fn handle_task_reject(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let approval_id = params.get("approval_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'approval_id' field".to_string())?;
+
+    let found = state.task_manager.lock().unwrap()
+        .resolve_approval(approval_id, false);
+
+    Ok(serde_json::json!({
+        "resolved": found,
+        "approved": false,
+    }))
+}
+
 // ── Main ──
 
+/// 从 `.somaos/env.json` 加载配置并设置环境变量
+fn load_env_config() {
+    let path = PathBuf::from(".somaos/env.json");
+    if !path.exists() {
+        return;
+    }
+    match std::fs::read_to_string(&path) {
+        Ok(content) => {
+            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(key) = config.get("deepseek_api_key").and_then(|v| v.as_str()) {
+                    std::env::set_var("DEEPSEEK_API_KEY", key);
+                    tracing::info!("Loaded DEEPSEEK_API_KEY from .somaos/env.json");
+                }
+                if let Some(key) = config.get("anthropic_api_key").and_then(|v| v.as_str()) {
+                    std::env::set_var("ANTHROPIC_API_KEY", key);
+                    tracing::info!("Loaded ANTHROPIC_API_KEY from .somaos/env.json");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[runtime] 读取 .somaos/env.json 失败: {}", e);
+        }
+    }
+}
+
 fn main() {
+    load_env_config();
+
     let args: Vec<String> = std::env::args().collect();
 
     tracing_subscriber::fmt()
@@ -966,7 +1081,7 @@ async fn build_app_state() -> (Arc<AppState>, Arc<OutputWriter>) {
         store: store.clone(),
         registry,
         active_runs: Mutex::new(std::collections::HashMap::new()),
-        task_manager: Mutex::new(TaskManager::new()),
+        task_manager: Mutex::new(TaskManager::new().with_store(store.clone())),
         event_sink,
         output: output.clone(),
         event_tx,
@@ -1024,6 +1139,8 @@ async fn async_main_stdio() {
             "task/get" => handle_task_get(request.params, &state),
             "task/send_message" => handle_task_send_message(request.params, &state),
             "task/cancel" => handle_task_cancel(request.params, &state),
+            "task/approve" => handle_task_approve(request.params, &state),
+            "task/reject" => handle_task_reject(request.params, &state),
             _ => Err(format!("unknown method: {}", request.method)),
         };
 

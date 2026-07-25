@@ -6,6 +6,7 @@ use crate::run_store::RunRecord;
 use crate::run_store::RunStatus;
 use crate::run_store::RunStore;
 use crate::store::{CaseEvent, CaseStore};
+use crate::task_store;
 
 pub struct SqliteCaseStore {
     conn: Mutex<Connection>,
@@ -19,6 +20,11 @@ impl SqliteCaseStore {
         };
         store.initialize_tables()?;
         Ok(store)
+    }
+
+    /// 获取内部 Connection 的锁（供 TaskStore 等外部模块使用）
+    pub fn connection(&self) -> std::sync::MutexGuard<Connection> {
+        self.conn.lock().unwrap()
     }
 
     pub fn schema_version(&self) -> SqlResult<i64> {
@@ -58,8 +64,13 @@ impl SqliteCaseStore {
                 value       TEXT NOT NULL
             );
 
-            INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '3');
-            INSERT OR IGNORE INTO metadata (key, value) VALUES ('store_type', 'soma-sqlite');",
+            INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '3');",
+        )?;
+        if let Err(e) = task_store::init_tasks_table(&conn) {
+            eprintln!("[store] tasks table init: {}", e);
+        }
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO metadata (key, value) VALUES ('store_type', 'soma-sqlite');",
         )?;
         Ok(())
     }

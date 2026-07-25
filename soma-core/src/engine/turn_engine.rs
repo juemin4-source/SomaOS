@@ -34,8 +34,12 @@ pub struct TurnEngine {
     tools: Vec<ToolDefinition>,
     /// 已接受的 Observation，用于下一轮模型请求
     observation_history: Vec<String>,
+    /// 完整对话历史：user→assistant 交替
+    conversation_history: Vec<ModelMessage>,
     /// 可选的持久化存储
     store: Option<Arc<dyn CaseStore>>,
+    /// 当前模型请求的 JoinHandle，用于取消
+    active_request: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl TurnEngine {
@@ -58,7 +62,9 @@ impl TurnEngine {
             turn_id,
             tools: Vec::new(),
             observation_history: Vec::new(),
+            conversation_history: Vec::new(),
             store,
+            active_request: None,
         }
     }
 
@@ -100,9 +106,34 @@ impl TurnEngine {
     }
 
     /// 接收用户问题，进入 AwaitingModel
+    /// 获取当前对话历史（用于持久化）
+    pub fn conversation(&self) -> Vec<(String, String)> {
+        self.conversation_history.iter().map(|m| {
+            (m.role.clone(), m.content.clone())
+        }).collect()
+    }
+
+    /// 设置先前对话历史（跨 turn 记忆）
+    pub fn with_conversation(&mut self, history: Vec<(String, String)>) {
+        for (role, content) in history {
+            self.conversation_history.push(ModelMessage {
+                role,
+                content,
+                tool_call_id: None,
+            });
+        }
+    }
+
     pub fn start(&mut self, question: &str, tools: Vec<ToolDefinition>) {
         self.state = TurnState::AwaitingModel;
         self.tools = tools.clone();
+
+        // 加入本次用户消息
+        self.conversation_history.push(ModelMessage {
+            role: "user".to_string(),
+            content: question.to_string(),
+            tool_call_id: None,
+        });
 
         self.record_and_push("turn.started", 1, Actor::User, serde_json::json!({
             "question": question,
@@ -117,9 +148,9 @@ impl TurnEngine {
 
     /// 构造当前 Context 对应的 SomaModelRequest
     fn build_request(&self) -> SomaModelRequest {
-        let mut messages = Vec::new();
+        let mut messages = self.conversation_history.clone();
 
-        // 加入已接受的观察结果作为 user messages
+        // 加入已接受的观察结果
         for obs in &self.observation_history {
             messages.push(ModelMessage {
                 role: "user".to_string(),
@@ -137,7 +168,24 @@ impl TurnEngine {
 
     /// 发起模型请求，消费流式事件
     /// 返回 (text_deltas, Option<ToolCall>)
+    ///
+    /// `on_delta` 可选回调：每个 TextDelta 到达时立即调用，用于实时推送。
     pub async fn request_model(&mut self) -> Result<(String, Option<ToolCall>), String> {
+        self.request_model_with_delta(|_| {}, std::future::pending()).await
+    }
+
+    /// 同上，但允许在流式 Delta 到达时调用回调
+    /// `on_delta` 在每个 TextDelta 到达时调用
+    /// `cancel` 是一个 future，在需要取消时 resolve
+    pub async fn request_model_with_delta<F, C>(
+        &mut self,
+        mut on_delta: F,
+        cancel: C,
+    ) -> Result<(String, Option<ToolCall>), String>
+    where
+        F: FnMut(&str) + Send,
+        C: std::future::Future<Output = ()> + Send,
+    {
         if self.state != TurnState::AwaitingModel {
             return Err(format!("invalid state for request_model: {:?}", self.state));
         }
@@ -151,63 +199,91 @@ impl TurnEngine {
         let task = tokio::spawn(async move {
             provider.complete_stream(request, tx).await
         });
+        
 
         let mut text = String::new();
         let mut tool_call: Option<ToolCall> = None;
         let mut pending_events: Vec<EventEnvelope> = Vec::new();
         let mut failed = None;
 
-        // 带超时的模型请求
+        // 带超时和取消的模型请求
+        let mut cancel = Box::pin(cancel);
         let result = timeout(MODEL_TIMEOUT, async {
-            while let Some(event) = rx.recv().await {
-                match event {
-                    SomaModelEvent::TextDelta(delta) => {
-                        text.push_str(&delta);
-                        pending_events.push(EventEnvelope::new(
-                            self.case_id.clone(), self.next_sequence(),
-                            "model.text_delta", 1, Actor::Model,
-                            serde_json::json!({"delta": delta}),
-                        ));
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = &mut cancel => {
+                        // 用户取消
+                        return Err("cancelled".to_string());
                     }
-                    SomaModelEvent::ReasoningDelta(delta) => {
-                        pending_events.push(EventEnvelope::new(
-                            self.case_id.clone(), self.next_sequence(),
-                            "model.reasoning_delta", 1, Actor::Model,
-                            serde_json::json!({"delta": delta}),
-                        ));
-                    }
-                    SomaModelEvent::ToolCallStarted(tc) => {
-                        tool_call = Some(tc.clone());
-                        pending_events.push(EventEnvelope::new(
-                            self.case_id.clone(), self.next_sequence(),
-                            "action.requested", 1, Actor::Model,
-                            serde_json::json!({"tool_call": tc}),
-                        ));
-                    }
-                    SomaModelEvent::ToolCallCompleted { call, result } => {
-                        pending_events.push(EventEnvelope::new(
-                            self.case_id.clone(), self.next_sequence(),
-                            "action.completed", 1, Actor::Model,
-                            serde_json::json!({"tool_call": call, "result": result}),
-                        ));
-                    }
-                    SomaModelEvent::ResponseCompleted => {
-                        pending_events.push(EventEnvelope::new(
-                            self.case_id.clone(), self.next_sequence(),
-                            "turn.response_completed", 1, Actor::Model,
-                            serde_json::Value::Null,
-                        ));
-                    }
-                    SomaModelEvent::ResponseFailed(err) => {
-                        failed = Some(err.clone());
+                    event = rx.recv() => {
+                        let Some(event) = event else { return Ok(()); };
+                        match event {
+                            SomaModelEvent::TextDelta(delta) => {
+                                text.push_str(&delta);
+                                on_delta(&delta);
+                                pending_events.push(EventEnvelope::new(
+                                    self.case_id.clone(), self.next_sequence(),
+                                    "model.text_delta", 1, Actor::Model,
+                                    serde_json::json!({"delta": delta}),
+                                ));
+                            }
+                            SomaModelEvent::ReasoningDelta(delta) => {
+                                pending_events.push(EventEnvelope::new(
+                                    self.case_id.clone(), self.next_sequence(),
+                                    "model.reasoning_delta", 1, Actor::Model,
+                                    serde_json::json!({"delta": delta}),
+                                ));
+                            }
+                            SomaModelEvent::ToolCallStarted(tc) => {
+                                tool_call = Some(tc.clone());
+                                pending_events.push(EventEnvelope::new(
+                                    self.case_id.clone(), self.next_sequence(),
+                                    "action.requested", 1, Actor::Model,
+                                    serde_json::json!({"tool_call": tc}),
+                                ));
+                            }
+                            SomaModelEvent::ToolCallCompleted { call, result } => {
+                                pending_events.push(EventEnvelope::new(
+                                    self.case_id.clone(), self.next_sequence(),
+                                    "action.completed", 1, Actor::Model,
+                                    serde_json::json!({"tool_call": call, "result": result}),
+                                ));
+                            }
+                            SomaModelEvent::ResponseCompleted => {
+                                pending_events.push(EventEnvelope::new(
+                                    self.case_id.clone(), self.next_sequence(),
+                                    "turn.response_completed", 1, Actor::Model,
+                                    serde_json::Value::Null,
+                                ));
+                            }
+                            SomaModelEvent::ResponseFailed(err) => {
+                                failed = Some(err.clone());
+                            }
+                        }
                     }
                 }
             }
         }).await;
 
         match result {
-            Ok(()) => {
-                // rx 正常关闭
+            Ok(Ok(())) => {
+                // 将助手回复加入对话历史
+                let final_text = text.trim().to_string();
+                if !final_text.is_empty() {
+                    self.conversation_history.push(ModelMessage {
+                        role: "assistant".to_string(),
+                        content: final_text,
+                        tool_call_id: None,
+                    });
+                }
+            }
+            Ok(Err(e)) => {
+                if e == "cancelled" {
+                    return Err("cancelled".to_string());
+                }
+                self.state = TurnState::Failed(e.clone());
+                return Err(format!("model error: {}", e));
             }
             Err(_elapsed) => {
                 self.state = TurnState::Failed("model timeout".to_string());
@@ -272,11 +348,24 @@ impl TurnEngine {
 
     /// 继续下一轮模型请求（收到 Observation 后）
     pub async fn continue_turn(&mut self) -> Result<(String, Option<ToolCall>), String> {
+        self.continue_turn_with_delta(|_| {}, std::future::pending::<()>()).await
+    }
+
+    /// 同上，支持流式 delta 回调
+    pub async fn continue_turn_with_delta<F, C>(
+        &mut self,
+        on_delta: F,
+        cancel: C,
+    ) -> Result<(String, Option<ToolCall>), String>
+    where
+        F: FnMut(&str) + Send,
+        C: std::future::Future<Output = ()> + Send,
+    {
         if !matches!(self.state, TurnState::AwaitingObservation { .. }) {
             return Err(format!("invalid state for continue_turn: {:?}", self.state));
         }
         self.state = TurnState::AwaitingModel;
-        self.request_model().await
+        self.request_model_with_delta(on_delta, cancel).await
     }
 
     /// 结束 turn，生成 ClaimProposed
@@ -285,6 +374,18 @@ impl TurnEngine {
             "claim": claim,
         }));
         self.state = TurnState::Completed;
+    }
+
+    /// 取消正在进行的模型请求（abort tokio task）
+    pub fn cancel_request(&mut self) {
+        if let Some(handle) = self.active_request.take() {
+            handle.abort();
+        }
+    }
+
+    /// 取出当前模型请求的 JoinHandle（用于注册到 TaskManager）
+    pub fn take_request_handle(&mut self) -> Option<tokio::task::JoinHandle<()>> {
+        self.active_request.take()
     }
 
     // ── M2: Policy & Action Trace Events ──

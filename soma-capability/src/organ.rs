@@ -123,48 +123,27 @@ impl Organ for FileOrgan {
 }
 
 /// Shell 命令执行能力（白名单）
+///
+/// 命令安全策略由 `soma_core::policy::classify_command` 统一裁决，
+/// 此处只做最基础的管道符/重定向拦截（策略层已检查，此处是二次防线）。
 pub struct ProcessOrgan {
     repo_root: PathBuf,
-    /// 允许的安全命令
-    allowed_commands: &'static [&'static str],
-    /// 禁止的危险命令
-    forbidden_prefixes: &'static [&'static str],
 }
 
 impl ProcessOrgan {
     pub fn new(repo_root: PathBuf) -> Self {
-        Self {
-            repo_root,
-            allowed_commands: &[
-                "ls", "dir", "cat", "type", "head", "tail", "echo", "echo.", "grep", "findstr",
-                "wc", "sort", "uniq", "cut", "tr", "diff", "fc",
-                "npm", "cargo", "rustc", "node", "python", "powershell",
-                "git", "pwd", "chdir", "cd", "date", "which", "where",
-                "copy", "xcopy", "robocopy", "mkdir", "move", "ren",
-            ],
-            forbidden_prefixes: &[
-                "rm", "del", "rd", "rmdir", "format",
-                "dd", "mkfs", "mount", "chmod", "chown",
-                ">", ">>", "|", ";", "&&", "||",
-            ],
-        }
+        Self { repo_root }
     }
 
     fn validate_command(&self, cmd: &str) -> Result<(), String> {
         let trimmed = cmd.trim();
-        // 检查黑名单前缀
-        for forbidden in self.forbidden_prefixes {
-            if trimmed.starts_with(forbidden) {
-                return Err(format!("forbidden command prefix: {}", forbidden));
+        // 只拦截管道和重定向（策略层也检查，此处是深度防御）
+        for dangerous in &[">", ">>", "|", ";", "&&", "||"] {
+            if trimmed.contains(dangerous) {
+                return Err(format!("shell operator not allowed: {}", dangerous));
             }
         }
-        // 检查白名单
-        let cmd_name = trimmed.split_whitespace().next().unwrap_or("");
-        if self.allowed_commands.contains(&cmd_name) {
-            Ok(())
-        } else {
-            Err(format!("command not allowed: {}", cmd_name))
-        }
+        Ok(())
     }
 }
 
@@ -209,11 +188,13 @@ impl Organ for ProcessOrgan {
 /// Git 只读操作能力
 pub struct GitOrgan {
     repo_root: PathBuf,
+    /// 此实例固定执行的 git 操作（供不传 action 的模型使用）
+    default_action: &'static str,
 }
 
 impl GitOrgan {
-    pub fn new(repo_root: PathBuf) -> Self {
-        Self { repo_root }
+    pub fn new(repo_root: PathBuf, default_action: &'static str) -> Self {
+        Self { repo_root, default_action }
     }
 }
 
@@ -222,7 +203,7 @@ impl Organ for GitOrgan {
     async fn execute(&self, input: Value) -> Result<Value, String> {
         let action = input.get("action")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "missing action field".to_string())?;
+            .unwrap_or(self.default_action);
 
         match action {
             "status" => {
