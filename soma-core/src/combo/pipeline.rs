@@ -12,6 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use chrono::Utc;
 
 // ── 产物类型标识（字符串常量） ──────────────────────────────────
 
@@ -299,25 +300,10 @@ impl ArtifactStore {
     }
 }
 
-// ── 时间戳（无 chrono 依赖时的降级） ────────────────────────
+// ── 时间戳 ────────────────────────────────────────────────────
 
 fn chrono_or_fallback() -> String {
-    // 尝试用 std::time 生成时间戳
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    // 格式化为 ISO-like 时间戳
-    let days = secs / 86400;
-    let h = (secs % 86400) / 3600;
-    let m = (secs % 3600) / 60;
-    let s = secs % 60;
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        1970 + (days / 365) as u32,
-        ((days % 365) / 30 + 1) as u32,
-        (days % 30 + 1) as u32,
-        h, m, s)
+    Utc::now().to_rfc3339()
 }
 
 // ── Combo 产物映射 ──────────────────────────────────────────

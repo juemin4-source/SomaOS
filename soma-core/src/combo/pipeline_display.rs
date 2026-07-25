@@ -51,45 +51,48 @@ pub fn render_describe(query: &str) -> String {
 
 /// Bug 修复管道路由显示
 fn render_bug_fix_describe(query: &str) -> String {
-    let _pipeline = bug_fix_chain();
+    let pipeline = bug_fix_chain();
     let router = bug_fix_shortcut_router();
 
-    // 模拟期望的执行路径：构建递增的产物
-    // 1. investigate → 产生 debug_report → 进入 implement
-    // 2. implement → 产生 code_changes → 进入 review
-    // 3. review → gate pass → 完成
     let mut output = String::new();
     output.push_str("Pipeline: Bug 修复短路管线\n");
     output.push_str(&format!("Query: {:?}\n\n", query));
     output.push_str("  ℹ️ 跳过 office-hours / spec / plan（直接进入调查）\n\n");
 
+    // 沿管线阶段递增产物，展示每个阶段的预期路径
     let mut artifacts = ArtifactStore::new();
 
-    // Stage 1: investigate → implement
-    let decision1 = router.decide("investigate", &artifacts, None, None);
-    let (icon1, action1) = describe_decision(&decision1);
-    output.push_str(&format!(" 1. {:<14} {} {} → 产出: debug_report\n",
-        "investigate", icon1, action1));
-    artifacts.store(Artifact::new(ARTIFACT_DEBUG, "investigate",
-        serde_json::json!({}), "root cause identified"));
+    for (i, stage) in pipeline.stages().iter().enumerate() {
+        let decision = router.decide(&stage.combo_id, &artifacts, None, None);
+        let (icon, action) = describe_decision(&decision);
 
-    // Stage 2: implement → review
-    let decision2 = router.decide("implement", &artifacts, None, None);
-    let (icon2, action2) = describe_decision(&decision2);
-    output.push_str(&format!(" 2. {:<14} {} {} → 产出: code_changes\n",
-        "implement", icon2, action2));
-    artifacts.store(Artifact::new("code_changes", "implement",
-        serde_json::json!({}), "fix applied"));
+        // 根据阶段选择产出 artifact
+        let combo_id: &str = &stage.combo_id;
+        let output_note = match combo_id {
+            "investigate" => "→ 产出: debug_report",
+            "implement" => "→ 产出: code_changes",
+            _ => "",
+        };
 
-    // Stage 3: review → complete or fallback
-    let decision3 = router.decide("review", &artifacts, Some("pass"), None);
-    let desc3 = match &decision3 {
-        RouteDecision::Complete => "修复完成".to_string(),
-        RouteDecision::Fallback(t) => format!("回退到 {}", t),
-        _ => "待审阅".to_string(),
-    };
-    output.push_str(&format!(" 3. {:<14} ▶  {} → Gate 通过即完成\n",
-        "review", desc3));
+        output.push_str(&format!(" {}. {:<14} {} {} {}\n",
+            i + 1, stage.combo_id, icon, action, output_note));
+
+        // 存储产物供后续阶段路由使用
+        match combo_id {
+            "investigate" => {
+                artifacts.store(Artifact::new(ARTIFACT_DEBUG, "investigate",
+                    serde_json::json!({}), "root cause identified"));
+            }
+            "implement" => {
+                artifacts.store(Artifact::new("code_changes", "implement",
+                    serde_json::json!({}), "fix applied"));
+            }
+            _ => {}
+        }
+    }
+
+    // 最后一步审阅通过时注明完成
+    output.push_str("  review 完成后 → Gate 通过即修复完成\n");
 
     output
 }

@@ -112,6 +112,15 @@ mod tests {
         state.set_test_result("2 failed, 1 passed");
         state.set_next("code.patch → test.run");
 
+        // 存储管线产物验证持久化
+        let artifact = super::pipeline::Artifact::new(
+            super::pipeline::ARTIFACT_DEBUG,
+            "investigate",
+            serde_json::json!({"root_cause": "wrong operator"}),
+            "a - b instead of a + b",
+        );
+        state.pipeline_artifacts.store(artifact);
+
         state.save(&path).unwrap();
         let loaded = WorkState::load(&path).unwrap();
 
@@ -120,6 +129,13 @@ mod tests {
         assert_eq!(loaded.confirmed_facts.len(), 1);
         assert!(loaded.confirmed_facts[0].contains("root cause"));
         assert_eq!(loaded.suggested_next, "code.patch → test.run");
+
+        // 验证管线产物持久化
+        assert!(!loaded.pipeline_artifacts.list_types().is_empty(),
+            "pipeline_artifacts should have entries after storing");
+        let debug = loaded.pipeline_artifacts.get(super::pipeline::ARTIFACT_DEBUG);
+        assert!(debug.is_some(), "debug artifact should survive roundtrip");
+        assert_eq!(debug.unwrap().producer, "investigate");
 
         std::fs::remove_file(&path).ok();
     }

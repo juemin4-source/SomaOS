@@ -17,6 +17,7 @@ use super::pipeline::ArtifactStore;
 
 /// 路由决策 — 下一步做什么
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum RouteDecision {
     /// 进入指定 Combo
     Enter(String),
@@ -60,6 +61,7 @@ impl RouteDecision {
 
 /// 规则匹配条件
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum RouteCondition {
     /// 指定产物类型存在
     ArtifactExists(String),
