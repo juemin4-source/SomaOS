@@ -1,104 +1,87 @@
-# SomaOS Handoff — 2026-07-24 (Phase 1 Complete)
+# SomaOS Handoff — 2026-07-25
 
-## 当前状态
+> **会话终点:** 0.8 主链 Combo 全部登记，9 Combos，52 tests
+> **下一目标:** GATE-SOMA-FULL-CHAIN-001（全链纵向切片）
 
-v0.2 Phase 1 全部完成。架构从"CLI 直接调 Core"升级为"CLI → Client → Runtime → Core"三层。
+---
 
-## 架构变更
-
-```
-之前: CLI（组合根）→ Core → Capability/Store
-之后: CLI（thin）→ Client → Runtime（组合根）→ Core
-                    ↑                ↑
-               soma-client      soma-runtime (独立进程)
-                    ↓                ↓
-               soma-protocol ←  JSON-RPC over stdio
-```
-
-关键设计约束已实施：
-- `soma-cli` 不再依赖 `soma-core`/`soma-model`/`soma-store`/`soma-capability`/`soma-model-rig`
-- 编译时隔离通过 `cargo tree` 已验证 ✅
-
-## 新增/变更 crate
-
-| crate | 状态 | 说明 |
-|-------|------|------|
-| `soma-core/src/run.rs` | ✅ 新增 | Run 实体 + RunStatus 状态机 + 4 tests |
-| `soma-store/src/run_store.rs` | ✅ 新增 | RunStore trait + SQLite 实现（runs 表） |
-| `soma-runtime/` | ✅ 新增 | 独立进程，JSON-RPC over stdio，包装 Core |
-| `soma-client/` | ⬆️ 重写 | 从 stub 升级为真实子进程传输层 |
-| `soma-cli/` | ⬆️ 重写 | 从组合根瘦身为 thin client |
-| `soma-protocol/` | ⬆️ 更新 | 新增 RunStatus 枚举、通用 Notification 类型 |
-
-## 协议方法
-
-| 方法 | 说明 | 同步/异步 |
-|------|------|----------|
-| `case/create` | 创建 Case，返回 case_id | 同步 |
-| `case/get` | 查询 Case 信息 | 同步 |
-| `run/start` | 启动 Run，立即返回 run_id | 异步（通知流） |
-| `run/get` | 查询 Run 状态 | 同步 |
-| `run/cancel` | 取消运行中的 Run | 同步 |
-
-Runtime 通知：`run.started` / `run.output` / `run.completed` / `run.failed` / `run.cancelled`
-
-## 测试状态
+## 项目状态
 
 ```
-48 tests, 全部通过
-├── soma-capability: 11
-├── soma-core: 13 (含 4 个 Run 新测试)
-├── soma-protocol: 7
-├── soma-client: 1 (runtime 子进程集成测试)
-├── soma-store integration: 2
-├── soma-core integration: 8
-├── soma-model: 5
-├── soma-model-rig: 2
-└── soma-cli: 0 (thin client)
+0.2  执行内核                    ✅ 已发布
+0.3  Review Combo               ✅ GATE-SOMA-FIRST-COMBO
+0.5  Investigate → Fix → Review ✅ 真实 dogfood 验证
+0.7  项目接管与工作连续性          ✅ T1-T3 验证
+0.8  gstack 全研发链              ⬜ Gate A 完成，B-E 待推进
+0.9  产品化                      ⬜
+1.0  日常可用                    ⬜
 ```
 
-## 剩余技术债务（来自 0.1 复盘）
+## 0.8 真实进度（诚实分级）
 
-| 债务 | 优先级 | 状态 |
-|------|--------|------|
-| crash-harness 自动化测试 | P1 | ❌ 未开始 |
-| CLI subprocess smoke test | P1 | ❌ 未开始 |
-| output_schema 真实填充 | P2 | ❌ 未开始 |
-| `action.completed` 事件移除 | P3 | ❌ 未开始 |
-| `usage.updated` / `turn.suspended/resumed` 补齐 | P3 | ❌ 未开始 |
+| Gate | 描述 | 状态 |
+|------|------|------|
+| A | 9 Combo 定义 + 登记 + 中文方法论 | ✅ 52 tests |
+| B | Combo 依赖与真实执行（Softill 绑定） | ⬜ 仅 3/9 有 Softill |
+| C | 跨 Combo 产物传递 | ⬜ 类型有，管线没接 |
+| D | 路由、回退与用户决策 | ⬜ |
+| E | 真实功能全链 Dogfood | ⬜ |
 
-## 下一方向 (0.2 Phase 2+)
+## 9 个 Combo
 
-- MCP Adapter — Native Protocol → MCP Tools/Resources
-- Turn/Action public protocol
-- Principal/Delegation
-- Event replay / reconnection
-- HTTP/WebSocket transport
+| Combo | ID | Softills | 状态 |
+|-------|-----|---------|------|
+| 产品方向诊断 | office-hours | 0（纯方法论） | ✅ 中文 |
+| 需求规格 | spec | 0（纯方法论） | ✅ 中文 |
+| 实施计划 | plan | 0（纯方法论） | ✅ 中文 |
+| 方案审阅 | plan-review | 0（纯方法论） | ✅ 中文 |
+| 调查 | investigate | 6（MCP + gstack） | ✅ 已有 |
+| 代码审阅 | review | 8（MCP + gstack + JS） | ✅ 已有 |
+| 质量验证 | qa | 0（纯方法论） | ✅ 中文 |
+| 交付发布 | ship | 0（纯方法论） | ✅ 中文 |
+| 项目接管 | project-takeover | 4（MCP） | ✅ 已有 |
 
-## 使用方式
+## 架构关键决策
 
-```powershell
-# 编译
-cargo build
+1. **V2 本体** — Skill = 方法论，Softill = 软件能力，Organ = 环境通道，Combo = S/S/O 完整连招
+2. **Hosted Native** — 不追求全 Rust 重写，控制权进入 Soma 即为原生
+3. **gstack 作为能力供体** — 方法论继承 gstack，Softill 优先复用旧资产
+4. **中文方法论** — 框架书面中文，推压口语化，不翻译
+5. **6 个方法论 Combo 当前只是 Skill** — 需通过 Full-Chain Gate 补完 Softill/Organ 绑定
 
-# 启动 runtime（直接）
-cargo run -p soma-runtime -- --stdio
+## 旧资产使用情况
 
-# 通过 CLI 使用（自动启动 runtime 子进程）
-cargo run -- investigate "项目中有个 Bug: ..."
+**Foundry MCP（9 个 VERIFIED）：** 用了 4/9（diff、status、log、file-search）
+**combo-lab JS handler（29 个）：** 用了 4/29（diff-reader、pattern-matcher、report-generator、evidence-collector）
+**gstack bin：** diff-scope、learnings-search、review-log
 
-# 需要模型 Provider
-$env:DEEPSEEK_API_KEY = "sk-..."
-cargo run -- investigate "分析一下这个错误"
+## 关键文档位置
+
+```
+.gstack/
+├── SOMAOS-1.0-NORTH-STAR-v2.md        北极星
+├── SOMAOS-ONTOLOGY-V2.md              本体定义
+├── SOMAOS-ROADMAP-TO-1.0.md           路线图
+├── GATE-SOMA-FIRST-COMBO.md           0.3 Gate
+├── GATE-SOMA-INVESTIGATE-COMBO.md      0.5 Gate
+├── GATE-SOMA-PROJECT-TAKEOVER.md       0.7 Gate
+├── GATE-SOMA-GSTACK-FULLCHAIN.md       0.8 Gate（含 5 级验收）
+├── legacy-asset-reclaim-review.md      旧资产盘点
+├── gstack-capability-map-phase1.md     gstack 能力地图
+├── gstack-phase2-three-skills.md       三个 Skill 深度解剖
+├── review-report-20260725.md           首次完整 Review 运行
 ```
 
-## 关键文件位置
+## 下一步最短路径
 
-```
-soma-runtime/src/main.rs        — Runtime 主进程（~440 行）
-soma-client/src/client.rs       — 子进程传输层
-soma-cli/src/main.rs            — thin CLI（~180 行）
-soma-core/src/run.rs            — Run 实体
-soma-store/src/run_store.rs     — RunStore trait
-soma-store/src/sqlite.rs        — SQLite 实现（含 runs 表）
-```
+1. **GATE-SOMA-FULL-CHAIN-001** — 用 SomaOS 自己的一个功能走通全链
+2. 六个方法论 Combo 获得 Softill 绑定和产物传递能力
+3. Gate B-E 逐步验收
+
+## 技术债务
+
+- 6 个方法论 Combo 没有 Softill 绑定
+- 无跨 Combo 产物传递管线
+- 无路由/回退逻辑
+- 无真实全链 Dogfood
+- stale test DB（已修 `.gitignore`，不会再出现）
