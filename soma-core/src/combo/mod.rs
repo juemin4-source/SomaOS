@@ -16,4 +16,6 @@ pub mod takeover;
 pub mod task;
 pub mod office_hours;
 pub mod spec;
+pub mod plan;
+pub mod plan_review;
 pub mod work_state;

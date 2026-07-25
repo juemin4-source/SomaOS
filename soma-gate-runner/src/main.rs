@@ -22,6 +22,8 @@ use soma_core::combo::investigate::investigate_combo;
 use soma_core::combo::takeover::project_takeover_combo;
 use soma_core::combo::office_hours::office_hours_combo;
 use soma_core::combo::spec::spec_combo;
+use soma_core::combo::plan::plan_combo;
+use soma_core::combo::plan_review::plan_review_combo;
 use soma_core::policy::*;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::claim::{AdjudicationStatus, Claim, ClaimAdjudicator, ClaimType};
@@ -578,6 +580,8 @@ fn build_combo_registry() -> ComboRegistry {
     reg.register(project_takeover_combo());
     reg.register(office_hours_combo());
     reg.register(spec_combo());
+    reg.register(plan_combo());
+    reg.register(plan_review_combo());
     reg
 }
 
@@ -594,7 +598,8 @@ async fn main() {
                 println!("{:<12} {:<25} {}", "ID", "Name", "Description");
                 println!("{}", "-".repeat(80));
                 for combo in reg.list() {
-                    println!("{:<12} {:<25} {}", combo.id, combo.name, &combo.description[..combo.description.len().min(50)]);
+                    let desc: String = combo.description.chars().take(50).collect();
+                    println!("{:<12} {:<25} {}", combo.id, combo.name, desc);
                 }
                 println!("\nTotal: {} Combo(s)", reg.list().len());
                 return;
