@@ -59,22 +59,39 @@ Gate 通过的真正标准不是"成功启动了 /review"，而是：
 
 ## 四、实现范围
 
-### 需要做的
+### 前置步骤：LEGACY-ASSET-RECLAIM-REVIEW
 
-1. **Combo 注册** — Review Combo 有 ID、描述、适用场景，Soma 能发现它
+在新建任何 Combo 零件之前，先盘旧资产中已经有什么可以直接复用。
+
+盘四批：
+1. **现有 Organ** — File / Git / Process 已提供哪些能力
+2. **现有代码类 Softill** — codebase.search, git.diff, test.run, code.patch 等是否真实可运行
+3. **现有 Skill 和元 Skill** — 代码审阅、证据判断、范围控制等方法论
+4. **现有 Combo** — 哪些可以直接继承、哪些需要升级、哪些降级为 Skill
+
+交付一张对照表：当前 Review Combo 需要什么 → 旧资产中有什么 → 处理方式（复用/包装/替换/新建）
+
+### 需要做的（经 LEGACY-ASSET-RECLAIM-REVIEW 确认后）
+
+1. **Combo 注册** — Review Combo 有 ID、描述、适用场景，Soma 能发现它 ✅（已完成）
 2. **依赖解析** — 能解析 Review Combo 依赖哪些 Skill、Softill、Organ
-3. **Skill 加载** — /review 的方法论（Scope Drift、Fix-First、Checklist 等）可在需要时加载
-4. **Softill 接入** — gstack-diff-scope 等 bin 工具可通过 Soma 调用
+3. **Skill 加载** — 方法论可在需要时加载（优先复用旧 Skill，不足部分从 gstack 补充）
+4. **Softill 接入** — 优先复用 SomaOS 已有真实能力，缺失再接入 gstack bin
 5. **Organ 接通** — Git、File、Process Organ 已就位（已有）
 6. **执行调度** — Soma 启动 Review Combo 并运行完整流程
 7. **产物接收** — Findings、Scope Check、Gate Result 被解析为结构化数据
 8. **状态管理** — 结果影响 Soma 的任务状态（PASS/FAIL/BLOCKED）
 
-### 技术方式：Hosted Native
+### 技术方式：混合继承
 
-第一版保留 gstack 文件和 bin 的执行。SomaOS 负责编排控制——发现、加载、调度、接收、路由。
+```
+Review Skill：主要继承 gstack 的成熟方法论
+Softill：优先复用 SomaOS 已有的真实能力，缺失部分再使用 gstack bin
+Organ：继续使用 SomaOS 已有 File / Git / Process
+Combo：由 SomaOS 按新本体重新组合
+```
 
-gstack 继续承担成熟的 Review 执行。Soma 不重写其内部流程。
+不再采用"整个 /review 由 gstack 黑盒执行"的方式。这比单纯调用外部 gstack 更能证明本体成立。
 
 ---
 
