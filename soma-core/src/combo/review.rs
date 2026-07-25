@@ -4,9 +4,19 @@ use super::combo::Combo;
 use super::skill::Skill;
 use super::softill::{Softill, SoftillInvocation};
 
-/// Review Combo 产出类型
-///
-/// Scope Check
+// GATE-SOMA-FIRST-COMBO: Review Combo definition
+//
+// LEGACY-ASSET-RECLAIM-REVIEW completed 2026-07-25.
+// Softills sourced from three verified origins:
+//   gstack-diff-scope         → project-level scope classification (bin)
+//   code-review-diff-reader   → file-level diff details (JS handler, 4775B)
+//   soma-repo-diff/status     → git via MCP (soma-repo server)
+//   soma-file-search          → code search via MCP
+// Workflow informed by combo-lab code-review combo's 6-node DAG.
+//
+// Review Combo 产出类型
+//
+// Scope Check
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ScopeVerdict {
     Clean,
@@ -127,11 +137,13 @@ Output:
     ));
 
     // ── Softill: Review 所需的软件能力 ──
+    // 来源: LEGACY-ASSET-RECLAIM-REVIEW — 已验证真实可用的资产
 
+    // gstack-diff-scope: 项目级 scope 分类 (backend/test/docs/api/auth 等布尔标记)
     combo.softills.push(Softill::new(
-        "gstack-diff-scope",
-        "Diff Scope Analysis",
-        "Analyze the scope of changes in a diff against the base branch.",
+        "change-scope-classify",
+        "Change Scope Classification",
+        "Classify a diff's scope into project-level categories (backend, frontend, tests, docs, etc.).",
         SoftillInvocation::Command {
             command: "gstack-diff-scope".into(),
             args_template: "<base_branch>".into(),
@@ -139,50 +151,89 @@ Output:
         "read-only",
     ));
 
+    // code-review-diff-reader: 文件级改动详情（路径、hunk、增减行、语言检测）
     combo.softills.push(Softill::new(
-        "gstack-review-log",
-        "Review Log Persistence",
-        "Persist review results for downstream use.",
-        SoftillInvocation::Command {
-            command: "gstack-review-log".into(),
-            args_template: "".into(),
+        "code-review-diff-reader",
+        "Diff Reader",
+        "Read and structure git diff data: file list, hunks, added/removed lines, language detection.",
+        SoftillInvocation::Script {
+            path: "somaos-combo-lab/.claude/softills/code-review-diff-reader/handler.mjs".into(),
+            interpreter: "node".into(),
         },
-        "write-local",
+        "read-only",
     ));
 
+    // soma-repo-diff: Git diff via MCP
     combo.softills.push(Softill::new(
-        "gstack-learnings-search",
-        "Learnings Search",
-        "Search past learnings for patterns relevant to the current review.",
-        SoftillInvocation::Command {
-            command: "gstack-learnings-search".into(),
-            args_template: "--query <query>".into(),
+        "repo-diff",
+        "Repository Diff",
+        "View git diff of a local repository. Available via mcp__soma-repo__soma_repo_diff.",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_diff".into(),
+        },
+        "read-only",
+    ));
+
+    // soma-repo-status: Git status via MCP
+    combo.softills.push(Softill::new(
+        "repo-status",
+        "Repository Status",
+        "View git repository status. Available via mcp__soma-repo__soma_repo_status.",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_status".into(),
+        },
+        "read-only",
+    ));
+
+    // soma-file-search: 代码内容搜索
+    combo.softills.push(Softill::new(
+        "soma-file-search",
+        "File Search",
+        "Search file contents with pattern matching. Available via mcp__soma-repo__soma_file_search.",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_file_search".into(),
         },
         "read-only",
     ));
 
     // ── Organ 依赖 ──
+    // Git, File, Process 已在 SomaOS 中实现
+    // MCP 工具 (soma-repo) 通过外部 MCP 服务器提供
 
     combo.organ_dependencies = vec![
         "git".into(),    // git diff, git log, git merge-base
         "file".into(),   // read source files
-        "process".into(), // run gstack scripts
+        "mcp".into(),    // MCP tools (soma-repo server)
     ];
 
     // ── 工作流程 ──
+    // 参考: combo-lab code-review combo (6-node DAG)
+    // nodes: strategy-select → context-gather → diff-analysis + pattern-matching → report-generation → evidence-collection
 
     combo.workflow = r#"Review Workflow
 
-1. Detect platform and base branch (gh/git)
-2. Check branch and diff
-3. Scope Drift Detection (intent vs delivery)
-4. Plan Discovery (find plan file if exists)
-5. Read Checklist (load review criteria)
-6. Get Diff
-7. Critical Pass (checklist categories + specialist dispatch)
-8. Fix-First (classify findings → auto-fix → batch-ask)
-9. Adversarial Review (independent subagent)
-10. Persist Results
+1. Strategy Select — 根据 diff 大小、风险等级、代码类型选择策略
+   Softill: change-scope-classify (gstack-diff-scope)
+
+2. Context Gather — 收集审查上下文：diff、commit 历史、相关文件
+   Softill: diff-reader + repo-diff + repo-status + file-search
+
+3. Diff Analysis — 分析 diff 内容，识别变更模式、风险区域
+   Softill: diff-reader (文件级结构化分析)
+   Parallel: pattern-matching
+
+4. Pattern Matching — 确定性模式检查（并行于 diff analysis）
+   Softill: code-review-pattern-matcher (来自 combo-lab)
+
+5. Report Generation — 合并分析结果，生成结构化审阅报告
+   Softill: code-review-report-generator (来自 combo-lab)
+
+6. Evidence Collection — 收集审查证据（仅 verified 模式）
+   Softill: code-review-evidence-collector (来自 combo-lab)
+
+7. Scope Drift Detection — 对比意图与实际改动
+8. Gate Decision — PASS / FAIL / BLOCKED
+9. Persist Results
 "#.to_string();
 
     // ── 完成标准 ──
@@ -193,12 +244,17 @@ Output:
     ];
 
     // ── 产物 ──
+    // 参考: combo-lab code-review combo 的 6 节点 DAG
 
     combo.outputs = vec![
+        "Scope Classification (BACKEND/FRONTEND/TESTS/DOCS/API/AUTH...)".into(),
+        "Diff Analysis (files, hunks, added/removed lines, languages)".into(),
+        "Pattern Findings (from pattern-matcher checks)".into(),
         "Scope Check (CLEAN / DRIFT DETECTED / REQUIREMENTS MISSING)".into(),
         "Findings list with severity, confidence, file:line, fix".into(),
         "Quality Score (0-10)".into(),
         "Gate Result (PASS / FAIL / BLOCKED)".into(),
+        "Evidence Report (for verified mode)".into(),
     ];
 
     combo
@@ -217,7 +273,7 @@ mod tests {
         assert!(!c.description.is_empty());
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 2);
-        assert_eq!(c.softills.len(), 3);
+        assert_eq!(c.softills.len(), 5);
         assert!(!c.organ_dependencies.is_empty());
         assert!(!c.outputs.is_empty());
     }
