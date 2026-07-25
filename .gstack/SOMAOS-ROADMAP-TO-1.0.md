@@ -56,19 +56,52 @@
 
 ---
 
-## 0.5 — 研发 Combo 体系成立
+## 0.5 — Investigate + Fix + Review 调查修复主链
 
-**目标：** SomaOS 不再只有一个为 Review 特制的能力。
+**目标：** SomaOS 拥有一条从用户描述 Bug 到交付修复结论的端到端研发能力链。
 
-**至少需要：**
-- Review Combo
-- Investigate Combo
-- Fix 或 Ship Combo
-- 复用共同 Softill 和 Organ
-- Soma 能根据任务选择 Combo
-- Combo 之间可以传递产物
+**核心链路：**
+```
+用户描述 Bug
+→ Investigate Combo
+→ 根因结论
+→ 实际修改代码（fix-combo 优先，单个 Softill 兜底）
+→ 新鲜测试验证
+→ Review Combo
+→ PASS / FAIL / BLOCKED
+```
 
-此时才证明本体不是 Review 特例。
+### A：能力存在 — Investigate Combo 正式成立
+
+与 Review 同级的 Combo 定义：
+- `combo-list` 可发现
+- `combo-info investigate` 可查看
+- 声明真实 Skill、Softill、Organ
+- 产出结构化调查结果（根因、修复、验证）
+
+### B：能力有效 — 端到端链路成立
+
+产物传递和状态衔接由 SomaOS 完成，不允许人工拼接。
+至少一个真实多文件 Bug 验证，保留完整记录。
+
+### Softill 复用
+
+优先使用现有 SomaOS 资产：代码搜索、Git 历史/Diff、测试执行、文件修改、结果回读。缺失从 gstack bin 补充，不重复制造同类能力。
+
+### fix-combo 处理
+
+优先验证旧 fix-combo（combo-lab code-review-fix-combo）。若不可用，降级为单个 Softill 修复。无论哪种，0.5 必须真实修改代码。
+
+### 验收标准
+
+1. Investigate Combo 可被发现、加载和执行
+2. 与 Review 使用同一套 Combo 基础机制
+3. 至少复用两个已存在的 Softill
+4. 至少复用一个旧 Combo 或执行骨架
+5. 能对真实 Bug 形成结构化根因、修复和验证结果
+6. 调查结果可以进入修复
+7. 修复结果可以进入 Review
+8. 至少一个多文件真实 Bug 的 Dogfood
 
 ---
 
