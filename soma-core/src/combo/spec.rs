@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use super::combo::Combo;
 use super::skill::Skill;
 
-/// Spec 产出
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpecDocument {
     pub title: String,
@@ -17,140 +16,141 @@ pub struct SpecDocument {
 pub fn spec_combo() -> Combo {
     let mut combo = Combo::new(
         "spec",
-        "Spec",
-        "Turn a fuzzy request into an executable spec: understand why, lock scope, interrogate code, draft, quality gate, file.",
+        "需求规格",
+        "把模糊需求转化成可执行的规格说明：理解动机、锁定范围、技术侦查、起草、质量门禁、归档。",
     );
 
     combo.when_to_use = vec![
+        "写一份需求文档".into(),
+        "把这个需求规格化".into(),
+        "出个 spec".into(),
         "write a spec".into(),
-        "spec this out".into(),
-        "turn this into a spec".into(),
-        "写规格".into(),
-        "生成需求文档".into(),
     ];
 
     combo.skills.push(Skill::new(
         "spec-methodology",
-        "Spec Methodology (gstack /spec)",
-        "Full spec process: understand why, scope/boundaries, technical interrogation, draft review, quality gate, redaction, filing.",
-        "writing a spec for a feature or change",
-        r#"# Spec Methodology (from gstack /spec)
+        "需求规格方法论（源自 gstack /spec）",
+        "完整的需求规格流程：理解动机、范围与边界、技术侦查、草稿审阅、质量门禁、脱敏、归档。",
+        "编写功能规格或需求文档",
+        r#"# 需求规格方法论
 
-## Phase 1: Understand the "Why"
+## 第一阶段：理解"为什么"
 
-Ask until all five are answered crisply:
+在继续之前，必须清晰回答以下五个问题。任何一个含糊都不能推进。
 
-1. **Who** is affected? (end user, system, team — "just me, solo dev" is fine)
-2. **What** is the current behavior? (what IS happening — verified, not assumed)
-3. **What** should the behavior be instead?
-4. **Why now?** (blocking work? costing money? correctness? compliance?)
-5. **How will we know it's done?** (observable, measurable outcome)
+1. **谁**受影响？（终端用户、系统、团队——"就我一人"也是答案）
+2. **当前**行为是什么？（实际发生了什么——验证过的，不是假设的）
+3. **期望**行为应该是什么？
+4. **为什么现在**？（阻塞了其他工作？在烧钱？正确性问题？合规风险？）
+5. **怎么算完成**？（可观察、可衡量的结果——不是"感觉好了"）
 
-Do NOT proceed until all five are answered without hand-waving.
+### 可选查重（--dedupe，默认开启）
 
-### Optional dedupe (--dedupe, ON by default)
+提取 2-4 个关键词，执行：gh issue list --search "<关键词>" --state open --limit 10
 
-Extract 2-4 keywords, run: gh issue list --search "<keywords>" --state open --limit 10
+- 0 条匹配 → 继续
+- 1+ 条匹配 → 展示给用户：合并到已有 Issue 还是新建？
+- gh 未安装/未登录/被限速 → 跳过并提示
 
-- 0 matches → continue silently
-- 1+ matches → surface to user: merge with existing or file new?
-- gh not installed / not authed / rate-limited → skip with message
+## 第二阶段：范围与边界
 
-## Phase 2: Scope and Boundaries
+必须回答：
 
-Ask until you can answer:
+1. **明确排除什么？** 尽早锁定——防止后期蔓延。
+2. **涉及哪些现有系统？** 文件、表、服务、端点。
+3. **有顺序依赖吗？** A 必须在 B 之前完成？
+4. **能交付价值的最小版本是什么？** 永远找到 MVP 切点。
+5. **失败模式和回滚方案是什么？** 如果上线出问题怎么收场？
 
-1. **What is explicitly out of scope?** Lock early — prevents creep.
-2. **What existing systems does this touch?** Files, tables, services, endpoints.
-3. **Are there ordering constraints?** Must A happen before B?
-4. **What's the smallest version that delivers the value?** Find the MVP cut.
-5. **What are the failure modes and rollback options?**
+范围未锁定前不得推进。
 
-## Phase 3: Technical Interrogation
+## 第三阶段：技术侦查（硬性要求：先读代码）
 
-HARD REQUIREMENT: Read at least one piece of code evidence BEFORE asking.
+**强制：在提出任何技术问题之前，必须至少读一份代码证据。**
 
-- If a file/symbol is mentioned → Grep it, Read it, cite path:line
-- If project-level → Read package.json/go.mod/Cargo.toml, relevant dirs
-- Truly novel greenfield → say "I searched for X, Y, Z, found nothing"
+- 如果提到了具体文件或符号 → 搜索它、读取它、在问题中引用 path:line
+- 如果是项目级问题 → 读项目结构（package.json/go.mod/Cargo.toml），读相关目录
+- 如果真的是全新的、没有现有代码可参考 → 明确说"我搜索了 X、Y、Z，没有找到相关代码，按全新功能处理"
 
-Then ask about categories that apply (skip irrelevant ones):
-- Data model: new tables, columns, migrations, indexes
-- API: new endpoints, modified responses, backwards compatibility
-- Background processing: new jobs, queue changes, idempotency
-- UI: new pages, modified components, state management
-- Infrastructure: IaC changes, secrets, cost
-- Testing: layers, regression risk
+然后根据需要问以下类别（跳过明显不相关的）：
 
-## Phase 4: Draft Review
+- **数据模型** — 新表、列、迁移、索引
+- **API** — 新端点、修改响应、向后兼容
+- **后台处理** — 新任务、队列变更、幂等性、失败处理
+- **UI** — 新页面、修改组件、状态管理
+- **基础设施** — IaC 变更、密钥、成本影响
+- **测试** — 各层怎么测、回归风险
 
-Present full draft issue. Ask: "Does this capture what you want? What did I get wrong?"
-Iterate until user confirms.
+能通过读代码回答的问题不要问。先读，再问读了也不知道的问题。
 
-## Phase 4.5: Quality Gate (--no-gate to skip)
+## 第四阶段：草稿审阅
 
-Codex reads the spec and scores 0-10 for "executability by an unfamiliar implementer."
-Lists specific ambiguities. If gate fails, revise.
+呈现完整的草稿 Issue，问："这准确捕捉了你想做的吗？我哪里搞错了？"
+迭代直到用户确认。
 
-## Phase 4.5a: Semantic Content Review (before redaction regex)
+## 第四阶段.5：质量门禁（--no-gate 跳过）
 
-Re-read the FINAL draft for what regex cannot catch:
+由第二个 AI 模型（Codex）阅读规格，对"一个不熟悉的实施者能否据此执行"打分 0-10，列出具体歧义点。
 
-1. Named individuals with negative judgments → rephrase to role
-2. Customer/vendor names with negative events → anonymize
-3. Unannounced internal strategy → flag
-4. NDA-bound material → flag
-5. Confidential context bleed → flag
+## 第四阶段.5a：语义内容审查（在正则脱敏之前）
 
-Output: SEMANTIC_REVIEW: clean | flagged
-On flagged: AskUser — A) edit, B) acknowledge, C) cancel. PUBLIC repo: B disabled.
+对最终草稿做结构化语义重读，检查正则无法捕获的问题：
 
-## Phase 4.5b: Fail-closed Redaction
+1. **具体人名 + 负面评价** — 建议改为角色称呼
+2. **客户/供应商名 + 负面事件** — 建议匿名化
+3. **未公开的内部策略** — 标记
+4. **NDA 约束内容** — 标记
+5. **保密上下文泄露** — 标记
 
-~30 secret/PII/legal patterns across 3 tiers:
-- HIGH (credentials): block
-- MEDIUM (PII/legal/internal): confirm via AskUserQuestion
-- LOW: surface
+输出：SEMANTIC_REVIEW: clean | flagged
+标记时询问用户：A) 编辑 B) 确认并继续 C) 取消。公开仓库禁止 B。
 
-## Phase 5: File the Spec
+## 第四阶段.5b：脱敏（fail-closed）
 
-Write to .gstack/*-design-*.md with structure:
-- Background and motivation
-- Requirements specification
-- Scope / non-goals
-- Technical approach
-- Implementation plan
-- Test strategy
-- Release plan
+约 30 种密钥/PII/法律模式，分三级：
+- HIGH（凭据）：直接阻止
+- MEDIUM（PII/法律/内部）：通过询问确认
+- LOW：提示
+
+## 第五阶段：归档
+
+写入 .gstack/*-design-*.md，结构如下：
+- 背景与动机
+- 需求规格
+- 范围 / 非目标
+- 技术方案
+- 实施计划
+- 测试策略
+- 发布计划
 "#,
     ));
 
     combo.organ_dependencies = vec!["git".into(), "file".into()];
 
-    combo.workflow = r#"Spec Workflow
+    combo.workflow = r#"需求规格流程
 
-1. Phase 1: Understand the Why (5 questions + optional dedupe)
-2. Phase 2: Scope and Boundaries (5 questions)
-3. Phase 3: Technical Interrogation (read code first)
-4. Phase 4: Draft Review + iterate
-5. Phase 4.5: Quality Gate (optional, codex)
-6. Phase 4.5a: Semantic Content Review
-7. Phase 4.5b: Fail-closed Redaction
-8. Phase 5: File the Spec
+1. 第一阶段：理解动机（5 个问题 + 可选查重）
+2. 第二阶段：范围与边界（5 个问题）
+3. 第三阶段：技术侦查（先读代码）
+4. 第四阶段：草稿审阅 + 迭代
+5. 第四阶段.5：质量门禁（可选）
+6. 第四阶段.5a：语义内容审查
+7. 第四阶段.5b：脱敏
+8. 第五阶段：归档
 "#.to_string();
 
     combo.completion_criteria = vec![
-        "All 5 why questions answered".into(),
-        "Scope and non-goals defined".into(),
-        "Code evidence read in Phase 3".into(),
-        "Draft confirmed by user".into(),
-        "Quality gate passed or skipped".into(),
-        "Spec filed".into(),
+        "五个动机问题全部回答".into(),
+        "范围和非目标已定义".into(),
+        "第三阶段已读代码证据".into(),
+        "草稿已由用户确认".into(),
+        "质量门禁已通过或跳过".into(),
+        "Spec 已归档".into(),
     ];
 
     combo.outputs = vec![
-        "SpecDocument (scope, requirements, technical approach)".into(),
-        ".gstack/*-design-*.md spec file".into(),
+        "SpecDocument（范围、需求、技术方案）".into(),
+        ".gstack/*-design-*.md 规格文件".into(),
     ];
 
     combo
@@ -179,16 +179,15 @@ mod tests {
     #[test]
     fn test_spec_document_serialize() {
         let d = SpecDocument {
-            title: "Add search feature".into(),
+            title: "添加搜索功能".into(),
             status: "draft".into(),
-            scope: vec!["full-text search".into()],
-            out_of_scope: vec!["AI-powered search".into()],
-            technical_notes: vec!["uses existing index".into()],
-            draft_body: "# Spec\nAdd search.\n".into(),
+            scope: vec!["全文搜索".into()],
+            out_of_scope: vec!["AI 搜索".into()],
+            technical_notes: vec!["使用已有索引".into()],
+            draft_body: "# Spec\n".into(),
             quality_score: Some(8.5),
         };
         let json = serde_json::to_string(&d).unwrap();
-        assert!(json.contains("full-text search"));
-        assert!(json.contains("8.5"));
+        assert!(json.contains("全文搜索"));
     }
 }
