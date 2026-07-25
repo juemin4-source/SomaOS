@@ -1,5 +1,6 @@
 target/
 .somaos/
+soma-cli-spike/
 
 *.exe
 *.pdb
@@ -8,3 +9,7 @@ target/
 soma.db
 cases/
 provider-cache/
+
+# Frontend
+soma-desktop/node_modules/
+soma-desktop/dist/

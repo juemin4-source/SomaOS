@@ -35,7 +35,10 @@ use soma_protocol::command::{Request, Response, ProtocolError, Notification};
 use soma_protocol::events::EventSink;
 
 mod task_manager;
+mod event_adapter;
+mod http_server;
 use task_manager::TaskManager;
+use tokio::sync::broadcast;  // for SSE event streaming
 use soma_protocol::params::{
     CaseCreateParams, CaseCreateResult,
     CaseGetParams, CaseGetResult,
@@ -56,22 +59,29 @@ struct AppState {
     active_runs: Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>,
     /// 任务管理器
     task_manager: Mutex<TaskManager>,
+    /// 事件 sink — 运行时事件 → JSON-RPC notification
+    event_sink: Arc<dyn EventSink>,
+    /// Output writer（HTTP 模式也需要写响应）
+    output: Arc<OutputWriter>,
+    /// SSE 事件广播通道（HTTP 模式用）
+    event_tx: broadcast::Sender<String>,
 }
+
 
 // ── Output writer (shared between main loop and async run tasks) ──
 
-struct OutputWriter {
-    inner: Mutex<BufWriter<io::Stdout>>,
+pub(crate) struct OutputWriter {
+    pub(crate) inner: Mutex<BufWriter<io::Stdout>>,
 }
 
 impl OutputWriter {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             inner: Mutex::new(BufWriter::new(io::stdout())),
         }
     }
 
-    fn write_response(&self, resp: &Response) {
+    pub(crate) fn write_response(&self, resp: &Response) {
         let json = match serde_json::to_string(resp) {
             Ok(j) => j,
             Err(e) => {
@@ -84,7 +94,7 @@ impl OutputWriter {
         let _ = w.flush();
     }
 
-    fn write_notification(&self, method: &str, params: &serde_json::Value) {
+    pub(crate) fn write_notification(&self, method: &str, params: &serde_json::Value) {
         let notif = Notification {
             jsonrpc: "2.0".into(),
             method: method.into(),
@@ -102,7 +112,7 @@ impl OutputWriter {
         let _ = w.flush();
     }
 
-    fn write_error(&self, id: u64, code: i32, message: &str) {
+    pub(crate) fn write_error(&self, id: u64, code: i32, message: &str) {
         self.write_response(&Response {
             jsonrpc: "2.0".into(),
             id,
@@ -438,6 +448,155 @@ async fn fail_run(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, out
     RunResult::Failed(error.to_string())
 }
 
+// ── Task Turn Execution ──
+
+/// 为 task/send_message 执行 AI Turn
+///
+/// 在 tokio::spawn 中运行，通过 EventSink 流式输出事件：
+///   AssistantDelta → (ToolStarted → ToolCompleted)* → TurnCompleted/TurnFailed
+///
+/// 与 run_turn_engine 的区别：
+///   - 使用 EventSink 而非 OutputWriter（事件进入 task/event notification 通道）
+///   - 使用 TaskManager 而非 RunStore 管理状态
+///   - 没有 case_id 绑定（任务独立于 case）
+async fn run_task_turn(
+    task_id: String,
+    turn_id: String,
+    input: String,
+    state: Arc<AppState>,
+) {
+    use soma_protocol::events::RuntimeEventKind::*;
+    let event_sink = &state.event_sink;
+    let mut seq: u64 = 0;
+
+    // Helper: emit event with incrementing sequence
+    let mut emit = |kind, payload: serde_json::Value| {
+        event_sink.emit_event(&task_id, &turn_id, seq, kind, payload);
+        seq += 1;
+    };
+
+    // Helper: check if task was cancelled
+    let is_cancelled = || -> bool {
+        state.task_manager.lock().unwrap().get(&task_id)
+            .map_or(false, |t| t.status == "interrupted")
+    };
+
+    // 1. 构建 Model Provider
+    let provider = match build_provider() {
+        Some(p) => p,
+        None => {
+            let msg = "无可用模型 Provider（设 DEEPSEEK_API_KEY 或 ANTHROPIC_API_KEY）".to_string();
+            emit(TurnFailed, serde_json::json!({"error": msg}));
+            state.task_manager.lock().unwrap().fail_turn(&task_id);
+            return;
+        }
+    };
+
+    if is_cancelled() {
+        emit(TurnInterrupted, serde_json::json!({}));
+        state.task_manager.lock().unwrap().fail_turn(&task_id);
+        return;
+    }
+
+    // 2. 构建 TurnEngine
+    let mut engine = TurnEngine::new(provider, task_id.clone());
+    let tools = state.registry.tool_definitions();
+    engine.start(&input, tools);
+
+    // 3. 第一轮模型请求
+    let (text, tool_call) = match engine.request_model().await {
+        Ok(result) => result,
+        Err(e) => {
+            emit(TurnFailed, serde_json::json!({"error": e}));
+            state.task_manager.lock().unwrap().fail_turn(&task_id);
+            return;
+        }
+    };
+
+    if is_cancelled() {
+        emit(TurnInterrupted, serde_json::json!({}));
+        state.task_manager.lock().unwrap().fail_turn(&task_id);
+        return;
+    }
+
+    // 4. 处理工具调用或直接结论
+    match tool_call {
+        Some(tc) => {
+            // 发出助手文字
+            if !text.is_empty() {
+                emit(AssistantDelta, serde_json::json!({"text": text}));
+            }
+
+            // 发出工具开始事件
+            emit(ToolStarted, serde_json::json!({
+                "tool_call_id": &tc.name,
+                "capability_id": &tc.name,
+                "arguments": tc.arguments,
+            }));
+
+            // 判断政策并执行
+            let decision = decide_capability(&tc.name, &tc.arguments, &state.registry);
+            engine.record_policy_evaluated(&tc.name, &format!("{:?}", &decision), "effect_class");
+
+            let obs = match &decision {
+                PolicyDecision::Allow => {
+                    execute_capability(&mut engine, &state.registry, &tc.name, tc.arguments.clone()).await
+                }
+                PolicyDecision::Deny(reason) => {
+                    engine.record_permission_denied(&tc.name, reason);
+                    format!("请求被拒绝: {}", reason)
+                }
+                PolicyDecision::NeedsOwner { reason } => {
+                    engine.record_permission_denied(&tc.name, reason);
+                    format!("需要用户授权（runtime 自动拒绝）: {}", reason)
+                }
+            };
+
+            // 发出工具完成事件
+            let success = !obs.starts_with("执行失败") && !obs.starts_with("请求被拒绝");
+            emit(ToolCompleted, serde_json::json!({
+                "tool_call_id": &tc.name,
+                "success": success,
+                "result_summary": obs.chars().take(200).collect::<String>(),
+            }));
+
+            if is_cancelled() {
+                emit(TurnInterrupted, serde_json::json!({}));
+                state.task_manager.lock().unwrap().fail_turn(&task_id);
+                return;
+            }
+
+            // 提供观察结果，继续
+            if let Err(e) = engine.provide_observation(&obs) {
+                tracing::warn!(task_id = %task_id, error = %e, "Failed to provide observation to engine");
+            }
+
+            // 第二轮模型请求
+            match engine.continue_turn().await {
+                Ok((cont_text, _)) => {
+                    engine.finish(&cont_text);
+                    if !cont_text.is_empty() {
+                        emit(AssistantDelta, serde_json::json!({"text": cont_text}));
+                    }
+                    emit(TurnCompleted, serde_json::json!({"outcome": cont_text}));
+                    state.task_manager.lock().unwrap().complete_turn(&task_id);
+                }
+                Err(e) => {
+                    emit(TurnFailed, serde_json::json!({"error": e}));
+                    state.task_manager.lock().unwrap().fail_turn(&task_id);
+                }
+            }
+        }
+        None => {
+            // 模型直接给出结论
+            engine.finish(&text);
+            emit(AssistantDelta, serde_json::json!({"text": text}));
+            emit(TurnCompleted, serde_json::json!({"outcome": text}));
+            state.task_manager.lock().unwrap().complete_turn(&task_id);
+        }
+    }
+}
+
 async fn handle_cancel(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>, output: &Arc<OutputWriter>) -> RunResult {
     let _ = store.update_run_status(
         run_id, StoreRunStatus::Cancelled,
@@ -452,7 +611,7 @@ async fn handle_cancel(run_id: &str, case_id: &str, store: &Arc<SqliteCaseStore>
 
 // ── Request handlers ──
 
-fn handle_case_create(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_case_create(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
     let p: CaseCreateParams = serde_json::from_value(params).map_err(|e| format!("invalid params: {}", e))?;
 
     let case_id = format!("SOMA-{}", &uuid::Uuid::new_v4().to_string()[..8]);
@@ -475,7 +634,7 @@ fn handle_case_create(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_case_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_case_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
     let p: CaseGetParams = serde_json::from_value(params).map_err(|e| format!("invalid params: {}", e))?;
 
     let case_store: Arc<dyn CaseStore> = store.clone();
@@ -490,7 +649,7 @@ fn handle_case_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> R
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_run_start(
+pub(crate) fn handle_run_start(
     params: serde_json::Value,
     state: &Arc<AppState>,
     output: &Arc<OutputWriter>,
@@ -555,7 +714,7 @@ fn handle_run_start(
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_run_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_run_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Result<serde_json::Value, String> {
     let p: RunGetParams = serde_json::from_value(params).map_err(|e| format!("invalid params: {}", e))?;
 
     match store.get_run(&p.run_id).map_err(|e| format!("store error: {}", e))? {
@@ -575,7 +734,7 @@ fn handle_run_get(params: serde_json::Value, store: &Arc<SqliteCaseStore>) -> Re
     }
 }
 
-fn handle_run_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_run_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let p: RunCancelParams = serde_json::from_value(params).map_err(|e| format!("invalid params: {}", e))?;
 
     // 设置取消标志
@@ -654,7 +813,7 @@ fn handle_softill_export(params: serde_json::Value) -> Result<serde_json::Value,
 
 // ── Task Handlers ──
 
-fn handle_task_create(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_task_create(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let title = params.get("title")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "missing 'title' field".to_string())?;
@@ -666,13 +825,13 @@ fn handle_task_create(params: serde_json::Value, state: &Arc<AppState>) -> Resul
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_task_list(_params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_task_list(_params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let tasks = state.task_manager.lock().unwrap().list();
     let result = soma_protocol::params::TaskListResult { tasks };
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_task_get(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_task_get(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let task_id = params.get("task_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "missing 'task_id' field".to_string())?;
@@ -683,28 +842,65 @@ fn handle_task_get(params: serde_json::Value, state: &Arc<AppState>) -> Result<s
     serde_json::to_value(task).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_task_send_message(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_task_send_message(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let task_id = params.get("task_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "missing 'task_id' field".to_string())?;
-    let _text = params.get("text")
+    let input = params.get("text")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "missing 'text' field".to_string())?;
+        .ok_or_else(|| "missing 'text' field".to_string())?
+        .to_string();
 
     let result = state.task_manager.lock().unwrap()
         .start_turn(task_id)
         .map_err(|e| format!("cannot start turn: {}", e))?;
+
+    let task_id_owned = task_id.to_string();
+    let turn_id_owned = result.turn_id.clone();
+    let state_clone = state.clone();
+
+    // 通过 EventSink 发出 TurnStarted 事件
+    state.event_sink.emit_event(
+        &task_id_owned,
+        &turn_id_owned,
+        0,
+        soma_protocol::events::RuntimeEventKind::TurnStarted,
+        serde_json::json!({}),
+    );
+
+    // 异步执行 AI Turn
+    tokio::spawn(async move {
+        run_task_turn(task_id_owned, turn_id_owned, input, state_clone).await;
+    });
+
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
-fn handle_task_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+pub(crate) fn handle_task_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
     let task_id = params.get("task_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "missing 'task_id' field".to_string())?;
 
+    // 先捕获 active_turn_id（cancel_turn 会清掉它）
+    let turn_id = state.task_manager.lock().unwrap()
+        .active_turn_id(task_id)
+        .unwrap_or_default();
+
     let result = state.task_manager.lock().unwrap()
         .cancel_turn(task_id)
         .map_err(|e| format!("cannot cancel: {}", e))?;
+
+    // 如果实际取消了，发出 TurnInterrupted 事件
+    if result.cancelled {
+        state.event_sink.emit_event(
+            task_id,
+            &turn_id,
+            0,
+            soma_protocol::events::RuntimeEventKind::TurnInterrupted,
+            serde_json::json!({}),
+        );
+    }
+
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
@@ -712,10 +908,6 @@ fn handle_task_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Resul
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 || args[1] != STDIO_FLAG {
-        eprintln!("Usage: soma-runtime --stdio");
-        std::process::exit(1);
-    }
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -726,11 +918,22 @@ fn main() {
         .init();
 
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
-    rt.block_on(async_main());
+
+    if args.len() >= 2 && args[1] == "--http" {
+        let port: u16 = args.get(2).and_then(|p| p.parse().ok()).unwrap_or(8080);
+        rt.block_on(async_main_http(port));
+    } else if args.len() >= 2 && args[1] == STDIO_FLAG {
+        rt.block_on(async_main_stdio());
+    } else {
+        eprintln!("Usage:");
+        eprintln!("  soma-runtime --stdio         JSON-RPC over stdin/stdout");
+        eprintln!("  soma-runtime --http [PORT]    HTTP server (default port 8080)");
+        std::process::exit(1);
+    }
 }
 
-async fn async_main() {
-    // 初始化 Store
+/// 构建共享的 AppState
+async fn build_app_state() -> (Arc<AppState>, Arc<OutputWriter>) {
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let store_path = repo_root.join(STORE_PATH);
     if let Some(parent) = store_path.parent() {
@@ -745,25 +948,37 @@ async fn async_main() {
         }
     };
 
-    // 构建能力注册表
     let registry = Arc::new(build_registry(repo_root));
 
-    // 检查 Provider
     if build_provider().is_none() {
         eprintln!("[runtime] 警告: 未配置模型 Provider（设 DEEPSEEK_API_KEY 或 ANTHROPIC_API_KEY）");
-        // 不退出——允许只做 case/create + run/get 等操作
     }
+
+    let output = Arc::new(OutputWriter::new());
+    // 创建 broadcast 通道，SSE 客户端和 Sink 共用
+    let (event_tx, _) = broadcast::channel::<String>(256);
+    // 使用 BroadcastNotificationSink（同时写 stdout + broadcast）
+    let event_sink = Arc::new(
+        event_adapter::BroadcastNotificationSink::new(output.clone(), event_tx.clone())
+    );
 
     let state = Arc::new(AppState {
         store: store.clone(),
         registry,
         active_runs: Mutex::new(std::collections::HashMap::new()),
         task_manager: Mutex::new(TaskManager::new()),
+        event_sink,
+        output: output.clone(),
+        event_tx,
     });
 
-    let output = Arc::new(OutputWriter::new());
+    (state, output)
+}
 
-    // 主循环：逐行读取 stdin
+/// --stdio 模式：逐行读取 stdin
+async fn async_main_stdio() {
+    let (state, output) = build_app_state().await;
+
     let stdin = io::stdin();
     let reader = stdin.lock();
     let mut line_buf = String::new();
@@ -772,7 +987,7 @@ async fn async_main() {
     loop {
         line_buf.clear();
         match reader.read_line(&mut line_buf) {
-            Ok(0) => break,  // EOF
+            Ok(0) => break,
             Ok(_) => {}
             Err(e) => {
                 eprintln!("[runtime] stdin error: {}", e);
@@ -789,7 +1004,6 @@ async fn async_main() {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("[runtime] parse error: {} (line: {})", e, line);
-                // 无法解析时无法返回错误——没有 id
                 continue;
             }
         };
@@ -798,7 +1012,7 @@ async fn async_main() {
         let result = match request.method.as_str() {
             "case/create" => handle_case_create(request.params, &state.store),
             "case/get" => handle_case_get(request.params, &state.store),
-            "run/start" => handle_run_start(request.params, &state, &output, store.clone()),
+            "run/start" => handle_run_start(request.params, &state, &output, state.store.clone()),
             "run/get" => handle_run_get(request.params, &state.store),
             "run/cancel" => handle_run_cancel(request.params, &state),
             "pipeline/describe" => handle_pipeline_describe(request.params),
@@ -824,7 +1038,7 @@ async fn async_main() {
         }
     }
 
-    // 清理：取消所有活跃 Run
+    // 清理
     {
         let runs = state.active_runs.lock().unwrap();
         for (_, flag) in runs.iter() {
@@ -832,4 +1046,11 @@ async fn async_main() {
         }
     }
     eprintln!("[runtime] 退出");
+}
+
+/// --http 模式：启动 HTTP 服务器
+async fn async_main_http(port: u16) {
+    let (state, _output) = build_app_state().await;
+    tracing::info!("Starting HTTP server on port {}", port);
+    http_server::serve(state, port).await;
 }

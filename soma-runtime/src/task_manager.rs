@@ -166,6 +166,12 @@ impl TaskManager {
             .map(|t| t.id.clone())
     }
 
+    /// 获取指定任务的 active_turn_id（如果有）
+    pub fn active_turn_id(&self, task_id: &str) -> Option<String> {
+        self.tasks.get(task_id)
+            .and_then(|t| t.active_turn_id.clone())
+    }
+
     /// 更新任务的 WorkState
     pub fn update_work_state(&mut self, task_id: &str, state: serde_json::Value) {
         if let Some(task) = self.tasks.get_mut(task_id) {
@@ -178,6 +184,24 @@ impl TaskManager {
     pub fn add_artifact(&mut self, task_id: &str, artifact: serde_json::Value) {
         if let Some(task) = self.tasks.get_mut(task_id) {
             task.artifacts.push(artifact);
+            task.updated_at = timestamp();
+        }
+    }
+
+    /// 完成当前 Turn（标记为 Completed）
+    pub fn complete_turn(&mut self, task_id: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.status = TaskStatus::Completed;
+            task.active_turn_id = None;
+            task.updated_at = timestamp();
+        }
+    }
+
+    /// Turn 失败（标记为 Idle 以便后续重试）
+    pub fn fail_turn(&mut self, task_id: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.status = TaskStatus::Idle;
+            task.active_turn_id = None;
             task.updated_at = timestamp();
         }
     }

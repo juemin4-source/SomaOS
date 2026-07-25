@@ -65,8 +65,8 @@ impl StdioClient {
 
     /// 发送 JSON-RPC 请求并等待响应
     ///
-    /// 对于 `run/start` 等异步方法，响应立即返回（含 run_id），
-    /// 后续通知可通过 `read_notification` 读取。
+    /// 自动跳过中间出现的通知（如 `task/event`），
+    /// 直到找到匹配请求 id 的响应。
     pub async fn send_request(
         &mut self,
         method: &str,
@@ -90,20 +90,33 @@ impl StdioClient {
         stdin.write_all(b"\n").await.map_err(|e| format!("写入换行失败: {}", e))?;
         stdin.flush().await.map_err(|e| format!("刷新 stdin 失败: {}", e))?;
 
-        // 读取响应
+        // 读取响应（跳过中间的通知）
         let reader = self.reader.as_mut().unwrap();
-        let mut line = String::new();
-        reader.read_line(&mut line).await.map_err(|e| format!("读取响应失败: {}", e))?;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).await.map_err(|e| format!("读取响应失败: {}", e))?;
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            return Err("runtime 返回空响应".into());
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // 尝试解析
+            let val: serde_json::Value = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            // 有 id 字段且匹配 → 响应
+            if let Some(resp_id) = val.get("id").and_then(|v| v.as_u64()) {
+                if resp_id == id {
+                    let resp: Response = serde_json::from_str(trimmed)
+                        .map_err(|e| format!("解析响应失败: {} (line: {})", e, trimmed))?;
+                    return Ok(resp);
+                }
+            }
+            // 无 id 字段 → 通知，跳过
         }
-
-        let resp: Response =
-            serde_json::from_str(trimmed).map_err(|e| format!("解析响应失败: {} (line: {})", e, trimmed))?;
-
-        Ok(resp)
     }
 
     /// 读取下一条通知（用于处理异步 Run 的进度推送）

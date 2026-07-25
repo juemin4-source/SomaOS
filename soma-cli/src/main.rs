@@ -94,19 +94,19 @@ async fn main() {
     }
 }
 
-/// 处理 investigate 命令：通过 Runtime 创建 Case 并异步执行
+/// 处理 investigate 命令：通过 Runtime 创建任务并执行 AI
 async fn run_investigate(query: &str) -> Result<(), i32> {
     let mut client = StdioClient::new();
 
-    // Phase 1: 创建 Case
     println!("🧪 正在连接 SomaOS Runtime...");
 
+    // Phase 1: 创建任务
     let resp = client
         .send_request(
-            "case/create",
+            "task/create",
             serde_json::json!({
+                "project_root": ".",
                 "title": query,
-                "initial_query": query,
             }),
         )
         .await
@@ -116,31 +116,26 @@ async fn run_investigate(query: &str) -> Result<(), i32> {
             1
         })?;
 
-    let case_id = resp
+    let task_id = resp
         .result
         .as_ref()
-        .and_then(|v| v["case_id"].as_str())
+        .and_then(|v| v["task_id"].as_str())
         .map(String::from)
         .ok_or_else(|| {
-            let err_msg = resp
-                .error
-                .as_ref()
-                .map(|e| e.message.as_str())
-                .unwrap_or("未知错误");
-            eprintln!("❌ 创建 Case 失败: {}", err_msg);
+            eprintln!("❌ 创建任务失败");
             1
         })?;
 
-    println!("🧪 Case {} 已创建", case_id);
+    println!("🧪 任务 {} 已创建", task_id);
     println!("📋 目标：{}", query);
 
-    // Phase 2: 启动 Run
+    // Phase 2: 发送消息（触发 AI 执行）
     let resp = client
         .send_request(
-            "run/start",
+            "task/send_message",
             serde_json::json!({
-                "case_id": case_id,
-                "input": query,
+                "task_id": task_id,
+                "text": query,
             }),
         )
         .await
@@ -149,58 +144,78 @@ async fn run_investigate(query: &str) -> Result<(), i32> {
             1
         })?;
 
-    let run_id = resp
+    let turn_id = resp
         .result
         .as_ref()
-        .and_then(|v| v["run_id"].as_str())
+        .and_then(|v| v["turn_id"].as_str())
         .map(String::from)
         .ok_or_else(|| {
-            eprintln!("❌ 启动 Run 失败");
+            eprintln!("❌ 发送消息失败");
             1
         })?;
 
-    println!("🚀 Run {} 已启动", run_id);
-    println!("\n🔍 正在调查...\n");
+    println!("🚀 AI 已启动 (turn: {})", turn_id);
+    println!();
 
-    // Phase 3: 读取通知流
+    // Phase 3: 读取事件流
     loop {
         match client.read_notification().await {
-            Ok(Some(notif)) => match notif.method.as_str() {
-                "run.started" => {
-                    // 可选：显示开始信息
+            Ok(Some(notif)) => {
+                if notif.method != "task/event" {
+                    continue;
                 }
-                "run.output" => {
-                    if let Some(text) = notif.params.get("text").and_then(|v| v.as_str()) {
-                        println!("{}", text);
+
+                let params = notif.params;
+                let kind = params
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                match kind {
+                    "AssistantDelta" => {
+                        if let Some(text) = params["payload"].get("text").and_then(|v| v.as_str()) {
+                            print!("{}", text);
+                        }
                     }
-                }
-                "run.completed" => {
-                    if let Some(outcome) = notif.params.get("outcome").and_then(|v| v.as_str()) {
-                        println!("\n✅ {}", outcome);
+                    "ToolStarted" => {
+                        let title = params["payload"]
+                            .get("capability_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
+                        println!("\n⚡ {} 执行中...", title);
                     }
-                    break;
+                    "ToolCompleted" => {
+                        let success = params["payload"]
+                            .get("success")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if success {
+                            println!("✅ 完成");
+                        } else {
+                            println!("❌ 失败");
+                        }
+                    }
+                    "TurnCompleted" => {
+                        println!("\n✅ 任务完成");
+                        break;
+                    }
+                    "TurnFailed" => {
+                        let error = params["payload"]
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("未知错误");
+                        eprintln!("\n❌ {}", error);
+                        return Err(1);
+                    }
+                    _ => {}
                 }
-                "run.failed" => {
-                    let error = notif
-                        .params
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("调查失败");
-                    eprintln!("\n❌ {}", error);
-                    return Err(1);
-                }
-                "run.cancelled" => {
-                    println!("\n❌ 已取消");
-                    return Err(1);
-                }
-                _ => {}
-            },
+            }
             Ok(None) => {
-                eprintln!("❌ Runtime 进程意外退出");
+                eprintln!("\n❌ Runtime 进程意外退出");
                 return Err(1);
             }
             Err(e) => {
-                eprintln!("❌ {}", e);
+                eprintln!("\n❌ {}", e);
                 return Err(1);
             }
         }

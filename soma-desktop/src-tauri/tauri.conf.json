@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/tauri-v2/main/tauri-utils/schema.json",
+  "productName": "SomaOS",
+  "version": "0.1.0",
+  "identifier": "com.somaos.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "SomaOS — Spatial Workbench",
+        "width": 1440,
+        "height": 960,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
