@@ -1,7 +1,7 @@
 # SomaOS 1.0 北极星 V2
 
-> **冻结:** 2026-07-25
-> **状态:** 产品方向 + 能力本体已冻结，下一阶段 Gate 待最终确认
+> **冻结:** 2026-07-25 (v2), 2026-07-25 (v2.1 补充)
+> **状态:** 产品方向 + 能力本体 + 用户路径 + 发布条件 + 版本边界已冻结
 > **前序文档:** SOMAOS-ONTOLOGY-V2.md（本体定义）、GATE-SOMA-GSTACK-EXTRACTION-001（能力考古）
 
 ---
@@ -129,52 +129,71 @@ SomaOS 1.0 与现有 Coding Agent 的核心差异：
 
 ---
 
-## 五、下一阶段 Gate
+## 五、1.0 核心用户路径
 
-### Gate 名称
-
-**GATE-SOMA-FIRST-COMBO**
-
-### 要证明什么
-
-Skill + Softill + Organ → Combo → 解决真实研发工作。
-
-不是再次证明治理链（GATE-002 已证明），而是证明能力体系能完整运行。
-
-### 候选路径
+### 路径 A：调查与修复
 
 ```
-A. 导入完整的 Review Combo（gstack /review 整体接入 SomaOS）
-B. 证明 gstack Combo 可以普遍导入 SomaOS
-C. 用 Skill + Softill + Organ 组装出一个新 Combo
-D. 证明 Soma 能在多个 Combo 之间路由完整研发工作
+Bug → 调查根因 → 修复 → 测试 → Review → 完成
 ```
 
-**Gate 需要决策：** 这四个候选对应不同的验证目标、工程量和风险。必须在北极星锁定后明确选择。
+### 路径 B：功能交付
 
-### 验收标准
+```
+需求 → 澄清 → 规格 → 计划 → 实施 → Review → QA → Ship
+```
 
-1. Soma 能发现一个 Combo，知道它解决什么问题
-2. Soma 能加载该 Combo 需要的 Skill
-3. Soma 能暴露并调用其 Softill
-4. Soma 能接通所需的 Organ
-5. Soma 能执行完整工作流程并接收产物
-6. Soma 能根据结果路由下一步
-7. 用户感知是一个自然、成熟的 Coding Agent
+### 路径 C：项目接管
+
+```
+已有代码和未完成状态
+→ 恢复上下文
+→ 判断当前进展
+→ 继续实施、修复和交付
+```
 
 ---
 
-## 六、Immediate Next（北极星锁定后）
+## 六、1.0 发布条件
 
-1. 确认下一阶段 Gate 的路径选择（A/B/C/D）
-2. 编写 Gate 规格（参考 GATE-001/002 格式）
-3. 进入实现阶段
-
-在此之前，不动代码。
+1. 三条路径（A/B/C）均可在真实项目中重复完成
+2. 用户可以打断、纠正、恢复和继续
+3. 多个 Combo 能共享产物并衔接
+4. Skill、Softill、Organ 能真实组成可用 Combo
+5. 用户愿意长期使用 SomaOS 开发 SomaOS
 
 ---
 
-## 七、Scope Control
+## 七、当前 Gate
+
+**GATE-SOMA-FIRST-COMBO — 导入完整 Review Combo**
+
+路径 A。状态：执行中。
+
+已完成：
+- Combo/Skill/Softill 类型定义
+- ComboRegistry（发现和选择）
+- Review Combo 定义（Skill + Softill + Organ + 产物）
+- `gate-runner combo-list` / `combo-info` 可用
+
+进行中：
+- Skill 加载管线
+- Softill 调用（gstack bin 接入）
+- 输出解析（Findings → 结构化数据）
+- 状态连接（PASS/FAIL/BLOCKED → 任务状态）
+
+验收标准：
+1. Combo 可被发现和选择 ✅
+2. Skill/Softill/Organ 依赖可解析加载
+3. 执行不依赖手动复制 Prompt
+4. gstack 继续承担执行
+5. Findings/Gate Result 可结构化接收
+6. 结果能改变任务状态
+7. 三个不同 Review 场景重复通过
+
+---
+
+## 八、Scope Control
 
 ### 明确不做什么
 
