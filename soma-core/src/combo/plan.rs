@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use super::combo::Combo;
 use super::skill::Skill;
+use super::softill::{Softill, SoftillInvocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImplementationPlan {
@@ -84,7 +85,50 @@ pub fn plan_combo() -> Combo {
 "#,
     ));
 
-    combo.organ_dependencies = vec!["git".into(), "file".into()];
+    // ── Softill: 实施计划所需软件能力 ──
+    // 使用 Foundry MCP 工具进行代码分析
+
+    combo.softills.push(Softill::new(
+        "repo-diff",
+        "Repository Diff",
+        "Git diff via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_diff".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "repo-log",
+        "Repository Log",
+        "Git commit log via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_log".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "code-search",
+        "Code Search",
+        "Search codebase for patterns and symbols. (foundry MCP codebase_server)",
+        SoftillInvocation::McpTool {
+            tool_name: "codebase_search".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "soma-file-search",
+        "File Search",
+        "Search file contents via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_file_search".into(),
+        },
+        "read-only",
+    ));
+
+    combo.organ_dependencies = vec!["git".into(), "file".into(), "mcp".into()];
 
     combo.workflow = r#"实施计划流程
 
@@ -123,6 +167,7 @@ mod tests {
         assert_eq!(c.id, "plan");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
+        assert_eq!(c.softills.len(), 4);
     }
 
     #[test]

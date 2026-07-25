@@ -1,6 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineDescribeParams {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineDescribeResult {
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaseCreateParams {
     pub title: String,
     pub initial_query: String,

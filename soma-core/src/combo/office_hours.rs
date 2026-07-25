@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use super::combo::Combo;
 use super::skill::Skill;
+use super::softill::{Softill, SoftillInvocation};
 
 /// Office Hours 模式
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,7 +160,40 @@ Builder 模式：用户在搞 side project / 学习 / 开源。
 "#,
     ));
 
-    combo.organ_dependencies = vec!["git".into(), "file".into()];
+    // ── Softill: 产品方向诊断所需软件能力 ──
+    // 使用 Foundry MCP 工具搜索代码库和历史
+
+    combo.softills.push(Softill::new(
+        "soma-file-search",
+        "File Search",
+        "Search file contents via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_file_search".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "repo-log",
+        "Repository Log",
+        "Git commit log via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_log".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "repo-status",
+        "Repository Status",
+        "Git status via MCP tool. (foundry soma-repo server)",
+        SoftillInvocation::McpTool {
+            tool_name: "soma_repo_status".into(),
+        },
+        "read-only",
+    ));
+
+    combo.organ_dependencies = vec!["git".into(), "file".into(), "mcp".into()];
 
     combo.workflow = r#"产品方向诊断流程
 
@@ -199,6 +233,7 @@ mod tests {
         assert_eq!(c.id, "office-hours");
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 1);
+        assert_eq!(c.softills.len(), 3);
     }
 
     #[test]

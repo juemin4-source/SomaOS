@@ -2,7 +2,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use super::pipeline::ArtifactStore;
+
 /// 最小工作状态 — 跨会话恢复所需的信息
+///
+/// 包含管线产物存储（ArtifactStore），支持跨 Combo 产物传递。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkState {
     pub task_goal: String,
@@ -15,6 +19,8 @@ pub struct WorkState {
     pub modified_files: Vec<String>,
     pub pending_decisions: Vec<String>,
     pub suggested_next: String,
+    /// 管线产物存储 — 各 Combo 产生的结构化产物
+    pub pipeline_artifacts: ArtifactStore,
     pub version: u32,
 }
 
@@ -31,6 +37,7 @@ impl WorkState {
             modified_files: vec![],
             pending_decisions: vec![],
             suggested_next: String::new(),
+            pipeline_artifacts: ArtifactStore::new(),
             version: 1,
         }
     }

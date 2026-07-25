@@ -21,3 +21,6 @@ pub mod plan_review;
 pub mod qa;
 pub mod ship;
 pub mod work_state;
+pub mod pipeline;
+pub mod pipeline_display;
+pub mod routing;

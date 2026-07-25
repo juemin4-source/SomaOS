@@ -590,6 +590,18 @@ fn handle_run_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
+// ── Pipeline Handlers ──
+
+fn handle_pipeline_describe(params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let query = params.get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'query' field".to_string())?;
+
+    let description = soma_core::combo::pipeline_display::render_describe(query);
+    let result = soma_protocol::params::PipelineDescribeResult { description };
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
 // ── Main ──
 
 fn main() {
@@ -682,6 +694,7 @@ async fn async_main() {
             "run/start" => handle_run_start(request.params, &state, &output, store.clone()),
             "run/get" => handle_run_get(request.params, &state.store),
             "run/cancel" => handle_run_cancel(request.params, &state),
+            "pipeline/describe" => handle_pipeline_describe(request.params),
             _ => Err(format!("unknown method: {}", request.method)),
         };
 

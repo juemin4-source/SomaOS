@@ -20,6 +20,20 @@ enum Commands {
         /// Case ID (e.g. SOMA-xxxx)
         case_id: String,
     },
+    /// Pipeline status and description
+    Pipeline {
+        #[command(subcommand)]
+        command: PipelineCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum PipelineCommand {
+    /// Describe the pipeline stages for a given task
+    Describe {
+        /// Task description (e.g. "fix login bug")
+        query: String,
+    },
 }
 
 #[tokio::main]
@@ -28,6 +42,9 @@ async fn main() {
     let result = match &cli.commands {
         Commands::Investigate { query } => run_investigate(query).await,
         Commands::Resume { case_id } => run_resume(case_id).await,
+        Commands::Pipeline { command } => match command {
+            PipelineCommand::Describe { query } => run_pipeline_describe(query).await,
+        },
     };
     if let Err(code) = result {
         std::process::exit(code);
@@ -221,4 +238,40 @@ async fn run_resume(case_id: &str) -> Result<(), i32> {
     }
 
     Ok(())
+}
+
+/// 处理 pipeline describe 命令：通过 Runtime 获取管线描述
+async fn run_pipeline_describe(query: &str) -> Result<(), i32> {
+    let mut client = StdioClient::new();
+
+    let resp = client
+        .send_request(
+            "pipeline/describe",
+            serde_json::json!({
+                "query": query,
+            }),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("❌ 无法连接 Runtime: {}", e);
+            eprintln!("   请确保 soma-runtime 已编译，或运行 cargo build -p soma-runtime");
+            1
+        })?;
+
+    match resp.result {
+        Some(result) => {
+            if let Some(description) = result["description"].as_str() {
+                println!("{}", description);
+                Ok(())
+            } else {
+                eprintln!("❌ Runtime 返回了意外的响应");
+                Err(1)
+            }
+        }
+        None => {
+            let msg = resp.error.map(|e| e.message).unwrap_or("未知错误".to_string());
+            eprintln!("❌ {}", msg);
+            Err(1)
+        }
+    }
 }
