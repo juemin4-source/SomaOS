@@ -1,0 +1,7 @@
+{
+  "name": "code-search",
+  "description": "[开发] Search codebase for patterns and symbols",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

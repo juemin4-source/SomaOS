@@ -1,0 +1,7 @@
+{
+  "name": "writing-combo",
+  "description": "[通用] Multi-step writing workflow",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

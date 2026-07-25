@@ -1,0 +1,7 @@
+{
+  "name": "template-fill",
+  "description": "[产品] Fill templates with variable data",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

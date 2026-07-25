@@ -1,0 +1,15 @@
+{
+  "name": "flue-eye",
+  "description": "[通用] 通过 Flue 桥接层操控桌面软件（Photoshop、Audition、Blender、Office 等）。支持 COM / AppleScript / CEP HTTP 三种桥接。",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js",
+  "capabilities": {
+    "software": "列出支持的和当前可用的桌面软件",
+    "context": "获取软件当前状态（文档、选中、视图等）",
+    "run": "在软件内部执行脚本（ExtendScript / Python / VBA），返回 JSON 结果",
+    "modal": "检测并关闭阻塞对话框",
+    "test": "运行适配器冒烟测试",
+    "where": "查看 Flue 安装位置和详细信息"
+  }
+}

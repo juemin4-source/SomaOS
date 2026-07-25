@@ -1,0 +1,7 @@
+{
+  "name": "register",
+  "description": "[产品] Register softill or asset to registry",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "service-dependency-map",
+  "description": "[开发] Map service dependencies",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "worker-spawn",
+  "description": "[产品] Spawn an external worker Claude Code session (no worktree, no inline agent)",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

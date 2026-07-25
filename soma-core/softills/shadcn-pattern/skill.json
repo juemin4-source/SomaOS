@@ -1,0 +1,7 @@
+{
+  "name": "shadcn-pattern",
+  "description": "[设计] Generate and apply shadcn UI component patterns",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

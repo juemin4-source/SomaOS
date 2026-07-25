@@ -1,0 +1,7 @@
+{
+  "name": "load-prompt",
+  "description": "[通用] Load and manage prompt templates",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

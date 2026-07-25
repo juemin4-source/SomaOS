@@ -1,0 +1,7 @@
+{
+  "name": "video-script-writer",
+  "description": "[通用] Write structured video scripts",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

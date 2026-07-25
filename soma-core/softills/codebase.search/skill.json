@@ -1,0 +1,7 @@
+{
+  "name": "codebase.search",
+  "description": "[开发] Search codebase content with regex pattern matching",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

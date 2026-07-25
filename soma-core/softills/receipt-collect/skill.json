@@ -1,0 +1,7 @@
+{
+  "name": "receipt-collect",
+  "description": "[产品] Collect execution receipt and evidence after task completion",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

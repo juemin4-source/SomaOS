@@ -1,0 +1,7 @@
+{
+  "name": "poetry-eye",
+  "description": "[通用] Browse and retrieve poetry",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

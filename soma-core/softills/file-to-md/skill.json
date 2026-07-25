@@ -1,0 +1,7 @@
+{
+  "name": "file-to-md",
+  "description": "[通用] Convert files to markdown format",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "wechat-eye",
+  "description": "[通用] WeChat integration and data access",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

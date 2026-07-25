@@ -1,0 +1,7 @@
+{
+  "name": "scaffold",
+  "description": "[产品] Generate scaffold/skeleton for new assets",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

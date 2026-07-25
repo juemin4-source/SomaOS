@@ -1,0 +1,7 @@
+{
+  "name": "screen-eye",
+  "description": "[设计] Capture and analyze screen content",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

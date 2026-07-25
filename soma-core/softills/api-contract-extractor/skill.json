@@ -1,0 +1,7 @@
+{
+  "name": "api-contract-extractor",
+  "description": "[开发] Extract API contracts from source code",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

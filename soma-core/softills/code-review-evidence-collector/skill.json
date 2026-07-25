@@ -1,0 +1,7 @@
+{
+  "name": "code-review-evidence-collector",
+  "description": "[开发] Collect and organize code review evidence",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

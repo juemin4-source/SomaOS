@@ -1,0 +1,7 @@
+{
+  "name": "frontend-route-map",
+  "description": "[开发] Map frontend routes and navigation",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

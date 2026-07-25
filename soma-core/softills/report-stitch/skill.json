@@ -1,0 +1,7 @@
+{
+  "name": "report-stitch",
+  "description": "[产品] Stitch multiple reports into summary",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

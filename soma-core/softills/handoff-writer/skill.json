@@ -1,0 +1,7 @@
+{
+  "name": "handoff-writer",
+  "description": "[产品] Write structured handoff documents",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

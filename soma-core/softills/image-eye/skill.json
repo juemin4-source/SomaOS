@@ -1,0 +1,7 @@
+{
+  "name": "image-eye",
+  "description": "[设计] Analyze image content and metadata",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

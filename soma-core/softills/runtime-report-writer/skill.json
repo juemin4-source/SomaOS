@@ -1,0 +1,7 @@
+{
+  "name": "runtime-report-writer",
+  "description": "[产品] Generate runtime execution reports",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

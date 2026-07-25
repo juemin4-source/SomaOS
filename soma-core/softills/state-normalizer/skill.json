@@ -1,0 +1,7 @@
+{
+  "name": "state-normalizer",
+  "description": "[通用] Normalize state values to [0,1] range",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

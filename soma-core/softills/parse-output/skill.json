@@ -1,0 +1,7 @@
+{
+  "name": "parse-output",
+  "description": "[通用] Parse structured output from text",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

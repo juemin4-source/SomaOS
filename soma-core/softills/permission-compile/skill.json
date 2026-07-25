@@ -1,0 +1,7 @@
+{
+  "name": "permission-compile",
+  "description": "[通用] Compile and validate permission configurations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

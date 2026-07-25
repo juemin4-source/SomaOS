@@ -1,0 +1,7 @@
+{
+  "name": "hook-install",
+  "description": "[通用] Install Soma event hooks",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

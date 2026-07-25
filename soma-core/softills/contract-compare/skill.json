@@ -1,0 +1,7 @@
+{
+  "name": "contract-compare",
+  "description": "[通用] Compare two interface contracts for compatibility",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

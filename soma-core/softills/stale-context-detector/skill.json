@@ -1,0 +1,7 @@
+{
+  "name": "stale-context-detector",
+  "description": "[开发] Detect stale or outdated context",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

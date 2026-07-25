@@ -1,0 +1,7 @@
+{
+  "name": "balance-eye",
+  "description": "[设计] Analyze visual balance and composition",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

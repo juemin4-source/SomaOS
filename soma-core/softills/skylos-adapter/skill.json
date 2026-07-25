@@ -1,0 +1,7 @@
+{
+  "name": "skylos-adapter",
+  "description": "[通用] Skylos platform adapter",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

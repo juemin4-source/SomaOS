@@ -1,0 +1,7 @@
+{
+  "name": "ui-screenshot-runner",
+  "description": "[设计] Run automated UI screenshot tests",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

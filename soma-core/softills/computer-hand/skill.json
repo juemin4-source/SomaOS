@@ -1,0 +1,7 @@
+{
+  "name": "computer-hand",
+  "description": "[开发] Control keyboard and mouse programmatically",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

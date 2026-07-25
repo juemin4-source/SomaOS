@@ -1,0 +1,7 @@
+{
+  "name": "code-review-diff-reader",
+  "description": "[开发] Read and structure git diff for code review",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

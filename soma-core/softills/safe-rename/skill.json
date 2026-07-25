@@ -1,0 +1,7 @@
+{
+  "name": "safe-rename",
+  "description": "[开发] Safely rename symbols across codebase",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

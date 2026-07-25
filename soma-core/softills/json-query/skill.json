@@ -1,0 +1,7 @@
+{
+  "name": "json-query",
+  "description": "[开发] Query and transform JSON data",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

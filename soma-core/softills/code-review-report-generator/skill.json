@@ -1,0 +1,7 @@
+{
+  "name": "code-review-report-generator",
+  "description": "[开发] Generate structured code review reports",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

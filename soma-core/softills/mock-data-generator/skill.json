@@ -1,0 +1,7 @@
+{
+  "name": "mock-data-generator",
+  "description": "[开发] Generate mock data from schema",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

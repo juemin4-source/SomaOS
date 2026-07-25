@@ -1,0 +1,7 @@
+{
+  "name": "meta-softill",
+  "description": "[通用] 元 softill：管理其他 softill 和 combo 的工具。blueprint 模式生成新 softill 骨架（含 handler + 输入验证 + try/catch + evidence），combo-scaffold 模式生成新 combo 定义（combo.yaml + SKILL.md），combo-list 列出所有 combo。audit 审查 softill 健康，discover 扫描发现，register 注册。需要创建/修改 softill 或 combo 时用这个工具。",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "combo-init",
+  "description": "[产品] Initialize combo orchestration plans",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

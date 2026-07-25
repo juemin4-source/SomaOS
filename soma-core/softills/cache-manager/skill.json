@@ -1,0 +1,7 @@
+{
+  "name": "cache-manager",
+  "description": "[开发] Manage caches and temporary data",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

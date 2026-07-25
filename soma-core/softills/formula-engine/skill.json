@@ -1,0 +1,7 @@
+{
+  "name": "formula-engine",
+  "description": "[开发] Evaluate mathematical formulas and expressions",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

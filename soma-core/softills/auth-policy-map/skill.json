@@ -1,0 +1,7 @@
+{
+  "name": "auth-policy-map",
+  "description": "[开发] Map authentication and authorization policies",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

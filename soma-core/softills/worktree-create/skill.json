@@ -1,0 +1,7 @@
+{
+  "name": "worktree-create",
+  "description": "[产品] Create git worktree for task isolation",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

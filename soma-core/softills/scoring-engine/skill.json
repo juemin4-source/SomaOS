@@ -1,0 +1,7 @@
+{
+  "name": "scoring-engine",
+  "description": "[开发] Score and rank items by criteria",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

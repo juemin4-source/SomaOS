@@ -1,0 +1,7 @@
+{
+  "name": "ocr-adapter",
+  "description": "[通用] OCR text extraction from images",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

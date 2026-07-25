@@ -1,0 +1,7 @@
+{
+  "name": "capcut-draft",
+  "description": "[通用] Generate CapCut video drafts",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

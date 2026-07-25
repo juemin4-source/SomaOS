@@ -1,0 +1,7 @@
+{
+  "name": "shell-hand",
+  "description": "[开发] Execute shell commands safely",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "research-manager",
+  "description": "[产品] Manage research traces and findings",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

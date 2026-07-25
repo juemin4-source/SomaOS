@@ -1,0 +1,7 @@
+{
+  "name": "md-process",
+  "description": "[通用] Process and transform markdown content",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

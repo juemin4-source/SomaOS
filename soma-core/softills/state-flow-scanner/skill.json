@@ -1,0 +1,7 @@
+{
+  "name": "state-flow-scanner",
+  "description": "[开发] Scan and analyze state flow",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

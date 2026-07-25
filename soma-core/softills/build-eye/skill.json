@@ -1,0 +1,7 @@
+{
+  "name": "build-eye",
+  "description": "[开发] Inspect build output and structure",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

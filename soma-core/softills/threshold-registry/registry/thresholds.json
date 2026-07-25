@@ -1,0 +1,51 @@
+{
+  "version": "0.1.0",
+  "scale": "[0,1]",
+  "fields": {
+    "scope_pressure": {
+      "type": "pressure", "healthyDirection": "low",
+      "levels": { "normal": [0, 0.3], "notice": [0.3, 0.5], "important": [0.5, 0.75], "critical": [0.75, 1] },
+      "recommended": { "critical": { "attention": "critical", "suggestedMode": "emergency", "inhibit": ["continue-write", "auto-finish"], "excite": ["owner-review", "diff-guardian"] } }
+    },
+    "failure_pain": {
+      "type": "pain", "healthyDirection": "low",
+      "levels": { "normal": [0, 0.25], "notice": [0.25, 0.45], "important": [0.45, 0.7], "critical": [0.7, 1] },
+      "recommended": { "critical": { "attention": "critical", "suggestedMode": "emergency", "inhibit": ["continue-patching", "auto-finish"], "excite": ["failure-analysis", "diagnostic-report"] } }
+    },
+    "token_heat": {
+      "type": "heat", "healthyDirection": "low",
+      "levels": { "normal": [0, 0.4], "notice": [0.4, 0.6], "important": [0.6, 0.8], "critical": [0.8, 1] },
+      "recommended": { "important": { "attention": "important", "suggestedMode": "economy", "inhibit": ["dispatch-agent", "read-full-context"], "excite": ["context-extractor", "use-cache", "narrow-scope"] } }
+    },
+    "abstraction_pressure": {
+      "type": "pressure", "healthyDirection": "low",
+      "levels": { "normal": [0, 0.3], "notice": [0.3, 0.5], "important": [0.5, 0.75], "critical": [0.75, 1] },
+      "recommended": { "important": { "attention": "important", "suggestedMode": "grounding", "inhibit": ["more-theory", "new-metaphor"], "excite": ["concrete-example", "workflow-binding"] } }
+    },
+    "trust_level": {
+      "type": "health", "healthyDirection": "high",
+      "levels": { "critical": [0, 0.35], "important": [0.35, 0.6], "notice": [0.6, 0.8], "normal": [0.8, 1] },
+      "recommended": { "critical": { "attention": "critical", "suggestedMode": "grounding", "inhibit": ["claim-complete", "more-theory"], "excite": ["provide-evidence", "owner-review"] } }
+    },
+    "execution_stability": {
+      "type": "health", "healthyDirection": "high",
+      "levels": { "critical": [0, 0.35], "important": [0.35, 0.6], "notice": [0.6, 0.8], "normal": [0.8, 1] },
+      "recommended": { "critical": { "attention": "critical", "suggestedMode": "emergency", "inhibit": ["continue-patching"], "excite": ["diagnostic-report"] } }
+    },
+    "skill_health": {
+      "type": "health", "healthyDirection": "high",
+      "levels": { "critical": [0, 0.35], "important": [0.35, 0.6], "notice": [0.6, 0.8], "normal": [0.8, 1] },
+      "recommended": { "important": { "attention": "important", "suggestedMode": "debug", "inhibit": ["publish", "delivery"], "excite": ["skill-review", "fix-gate-violations"] } }
+    },
+    "context_freshness": {
+      "type": "freshness", "healthyDirection": "high",
+      "levels": { "critical": [0, 0.25], "important": [0.25, 0.5], "notice": [0.5, 0.75], "normal": [0.75, 1] },
+      "recommended": { "important": { "attention": "important", "suggestedMode": "grounding", "inhibit": ["continue-with-stale-context"], "excite": ["reload-context", "verify-current-files"] } }
+    },
+    "delivery_readiness": {
+      "type": "readiness", "healthyDirection": "high",
+      "levels": { "critical": [0, 0.35], "important": [0.35, 0.6], "notice": [0.6, 0.8], "normal": [0.8, 1] },
+      "recommended": { "critical": { "attention": "important", "suggestedMode": "debug", "inhibit": ["claim-complete"], "excite": ["run-tests", "run-gate", "provide-evidence"] } }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "project-state-manager",
+  "description": "[产品] Track and manage project state",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

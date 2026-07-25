@@ -1,0 +1,7 @@
+{
+  "name": "fullstack-map",
+  "description": "[开发] Generate fullstack architecture map",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

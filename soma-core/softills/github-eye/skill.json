@@ -1,0 +1,7 @@
+{
+  "name": "github-eye",
+  "description": "[通用] Inspect GitHub repository metadata",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "pattern-research",
+  "description": "[通用] Research and document patterns",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

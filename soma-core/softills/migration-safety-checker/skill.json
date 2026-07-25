@@ -1,0 +1,7 @@
+{
+  "name": "migration-safety-checker",
+  "description": "[开发] Check migration safety and impact",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

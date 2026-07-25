@@ -1,0 +1,7 @@
+{
+  "name": "endpoint-smoke-tester",
+  "description": "[开发] Smoke test API endpoints",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

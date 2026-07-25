@@ -1,0 +1,9 @@
+{
+  "name": "file-eye",
+  "description": "[DEPRECATED] 请使用 soma_file_search MCP 工具代替。原功能：Fast file system search and inspection",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js",
+  "deprecated": true,
+  "replaced_by": "soma-repo MCP server (soma_file_search)"
+}

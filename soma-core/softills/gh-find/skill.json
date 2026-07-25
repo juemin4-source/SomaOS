@@ -1,0 +1,7 @@
+{
+  "name": "gh-find",
+  "description": "[通用] Search GitHub repositories and code",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

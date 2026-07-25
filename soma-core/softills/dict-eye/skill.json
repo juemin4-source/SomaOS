@@ -1,0 +1,7 @@
+{
+  "name": "dict-eye",
+  "description": "[通用] Look up word definitions and translations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

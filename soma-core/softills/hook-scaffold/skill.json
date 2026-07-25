@@ -1,0 +1,7 @@
+{
+  "name": "hook-scaffold",
+  "description": "[通用] Generate hook skeleton code",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "design-thief",
+  "description": "[设计] Extract design tokens from visuals and screenshots",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

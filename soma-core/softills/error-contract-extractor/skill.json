@@ -1,0 +1,7 @@
+{
+  "name": "error-contract-extractor",
+  "description": "[开发] Extract error contracts from code",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

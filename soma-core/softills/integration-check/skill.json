@@ -1,0 +1,7 @@
+{
+  "name": "integration-check",
+  "description": "[开发] Check component integration readiness",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "frontend-api-usage-scanner",
+  "description": "[开发] Scan frontend code for API usage patterns",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

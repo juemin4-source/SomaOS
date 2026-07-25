@@ -1,0 +1,7 @@
+{
+  "name": "component-inventory",
+  "description": "[开发] Scan and catalog project structure by file type",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

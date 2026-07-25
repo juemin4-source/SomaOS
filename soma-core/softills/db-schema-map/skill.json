@@ -1,0 +1,7 @@
+{
+  "name": "db-schema-map",
+  "description": "[开发] Map database schema and relationships",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "test-selector",
+  "description": "[开发] Select and prioritize relevant tests",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "hook-validate",
+  "description": "[通用] Validate hook configuration",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

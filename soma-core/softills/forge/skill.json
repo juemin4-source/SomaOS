@@ -1,0 +1,7 @@
+{
+  "name": "forge",
+  "description": "[通用] Forge and craft new capabilities from traces",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "design-token-auditor",
+  "description": "[设计] Audit design token usage and consistency",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

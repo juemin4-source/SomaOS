@@ -1,0 +1,7 @@
+{
+  "name": "crypto-eye",
+  "description": "[通用] Query cryptocurrency prices and data",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

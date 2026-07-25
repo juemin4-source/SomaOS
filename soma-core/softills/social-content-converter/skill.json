@@ -1,0 +1,7 @@
+{
+  "name": "social-content-converter",
+  "description": "[通用] Convert content between social platforms",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

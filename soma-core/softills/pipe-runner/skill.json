@@ -1,0 +1,7 @@
+{
+  "name": "pipe-runner",
+  "description": "[开发] Execute DAG-based pipeline of softills",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

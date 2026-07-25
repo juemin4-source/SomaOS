@@ -1,0 +1,7 @@
+{
+  "name": "visual-diff-checker",
+  "description": "[设计] Compare screenshots and detect visual differences",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

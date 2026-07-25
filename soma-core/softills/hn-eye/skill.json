@@ -1,0 +1,7 @@
+{
+  "name": "hn-eye",
+  "description": "[通用] Browse Hacker News stories and comments",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

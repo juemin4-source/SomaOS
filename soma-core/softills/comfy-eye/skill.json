@@ -1,0 +1,7 @@
+{
+  "name": "comfy-eye",
+  "description": "[通用] ComfyUI workflow integration",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

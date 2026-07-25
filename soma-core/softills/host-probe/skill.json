@@ -1,0 +1,7 @@
+{
+  "name": "host-probe",
+  "description": "[通用] Probe and inspect host environment",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

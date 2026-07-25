@@ -1,0 +1,13 @@
+{
+  "name": "zlib-eye",
+  "description": "[通用] 搜索、定位和下载 Z-Library 离线种子档案中的书籍。支持 search / locate / download / download_http 四种模式。",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js",
+  "capabilities": {
+    "search": "全文搜索 600 万册书的标题、作者、语言、格式（本地 SQLite）",
+    "locate": "定位书籍在哪个种子文件中，返回文件索引和大小",
+    "download": "通过 aria2 从 BitTorrent 网络下载指定书籍（需网络连接和活跃种子，种源可能不稳定）",
+    "download_http": "通过 Playwright 从 Z-Library 镜像站 HTTP 下载书籍（推荐，更稳定）"
+  }
+}

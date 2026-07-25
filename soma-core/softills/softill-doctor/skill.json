@@ -1,0 +1,7 @@
+{
+  "name": "softill-doctor",
+  "description": "[产品] Diagnose and fix softill issues",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

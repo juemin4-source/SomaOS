@@ -1,0 +1,7 @@
+{
+  "name": "html-parse",
+  "description": "[开发] Parse and extract structured data from HTML",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

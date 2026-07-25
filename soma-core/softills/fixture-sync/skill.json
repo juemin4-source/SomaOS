@@ -1,0 +1,7 @@
+{
+  "name": "fixture-sync",
+  "description": "[开发] Sync test fixtures with source",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

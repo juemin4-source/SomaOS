@@ -1,0 +1,7 @@
+{
+  "name": "api-client-generator",
+  "description": "[开发] Generate API client code from contracts",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

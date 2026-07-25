@@ -1,0 +1,7 @@
+{
+  "name": "creative-writing-combo",
+  "description": "[通用] Creative writing generation",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

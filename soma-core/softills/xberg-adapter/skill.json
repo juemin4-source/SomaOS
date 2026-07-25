@@ -1,0 +1,7 @@
+{
+  "name": "xberg-adapter",
+  "description": "[通用] Platform integration adapter",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

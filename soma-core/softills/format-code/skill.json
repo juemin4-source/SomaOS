@@ -1,0 +1,7 @@
+{
+  "name": "format-code",
+  "description": "[开发] Format source code with language-specific tools",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "collect-context",
+  "description": "[产品] Collect project context for handoff",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

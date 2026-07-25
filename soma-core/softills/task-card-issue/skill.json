@@ -1,0 +1,7 @@
+{
+  "name": "task-card-issue",
+  "description": "[产品] Create and issue a task card with lifecycle management",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

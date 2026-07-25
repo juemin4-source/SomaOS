@@ -1,0 +1,7 @@
+{
+  "name": "design-eye",
+  "description": "[设计] Analyze design references and extract visual tokens",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

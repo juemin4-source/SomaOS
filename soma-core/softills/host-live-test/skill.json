@@ -1,0 +1,7 @@
+{
+  "name": "host-live-test",
+  "description": "[通用] Run live tests on host environment",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

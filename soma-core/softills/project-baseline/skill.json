@@ -1,0 +1,7 @@
+{
+  "name": "project-baseline",
+  "description": "[产品] Establish and compare project baselines",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "keymouse-adapter",
+  "description": "[开发] Adapter for keyboard/mouse input simulation",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

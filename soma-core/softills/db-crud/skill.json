@@ -1,0 +1,7 @@
+{
+  "name": "db-crud",
+  "description": "[开发] Perform database CRUD operations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "country-eye",
+  "description": "[通用] Look up country data and information",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "git-tools",
+  "description": "[DEPRECATED] 请使用 repo transport 中的 soma_repo_status/log/diff/branch MCP 工具代替。原功能：Git status/diff/log/branch with structured JSON output",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs",
+  "deprecated": true,
+  "replaced_by": "soma-repo MCP server (soma_repo_status, soma_repo_log, soma_repo_diff, soma_repo_branch)"
+}

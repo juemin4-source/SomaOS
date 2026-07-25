@@ -1,0 +1,7 @@
+{
+  "name": "diff-review",
+  "description": "[开发] Review git diff and detect scope changes and risks",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

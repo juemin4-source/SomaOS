@@ -1,0 +1,7 @@
+{
+  "name": "mingli-bazi",
+  "description": "[通用] Chinese BaZi fortune analysis",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

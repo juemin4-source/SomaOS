@@ -1,0 +1,1 @@
+{"name":"maker-scoring","description":"[通用] 造物公式评分引擎 — 接收 8 变量返回 W 得分及杠杆分析","type":"softill","runtime":"node","entry":"handler.mjs"}

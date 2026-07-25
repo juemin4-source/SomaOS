@@ -1,0 +1,7 @@
+{
+  "name": "mingli-ziwei",
+  "description": "[通用] Chinese ZiWei fortune analysis",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

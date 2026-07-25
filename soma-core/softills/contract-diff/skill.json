@@ -1,0 +1,7 @@
+{
+  "name": "contract-diff",
+  "description": "[开发] Compare API contracts for breaking changes",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

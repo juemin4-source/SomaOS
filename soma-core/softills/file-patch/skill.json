@@ -1,0 +1,7 @@
+{
+  "name": "file-patch",
+  "description": "[开发] Apply precise file modifications with dry-run support",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

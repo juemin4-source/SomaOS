@@ -1,0 +1,7 @@
+{
+  "name": "desktop-native",
+  "description": "[通用] Desktop native OS operations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

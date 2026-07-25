@@ -1,0 +1,7 @@
+{
+  "name": "task-ledger",
+  "description": "[开发] Track task state with 11 CRUD operations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "prd-slicer",
+  "description": "[产品] Slice PRD into version-scoped chunks",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "visual-pipeline",
+  "description": "[开发] Visual automation pipeline with branching",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

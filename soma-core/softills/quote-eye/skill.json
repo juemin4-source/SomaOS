@@ -1,0 +1,7 @@
+{
+  "name": "quote-eye",
+  "description": "[通用] Retrieve quotes and sayings",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

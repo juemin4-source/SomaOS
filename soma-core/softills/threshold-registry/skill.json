@@ -1,0 +1,7 @@
+{
+  "name": "threshold-registry",
+  "description": "[通用] Manage threshold configurations",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

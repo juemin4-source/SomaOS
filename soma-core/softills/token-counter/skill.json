@@ -1,0 +1,7 @@
+{
+  "name": "token-counter",
+  "description": "[开发] Count tokens in text or files",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

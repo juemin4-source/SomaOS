@@ -1,0 +1,7 @@
+{
+  "name": "softill-init",
+  "description": "[产品] Initialize new softill scaffold",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

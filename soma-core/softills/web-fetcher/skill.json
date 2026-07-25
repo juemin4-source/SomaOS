@@ -1,0 +1,7 @@
+{
+  "name": "web-fetcher",
+  "description": "[通用] Fetch and extract content from web pages",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

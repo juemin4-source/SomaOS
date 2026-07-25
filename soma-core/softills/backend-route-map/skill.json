@@ -1,0 +1,7 @@
+{
+  "name": "backend-route-map",
+  "description": "[开发] Map backend routes and handlers",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

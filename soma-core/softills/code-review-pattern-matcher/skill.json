@@ -1,0 +1,7 @@
+{
+  "name": "code-review-pattern-matcher",
+  "description": "[开发] Match code patterns during code review",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

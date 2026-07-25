@@ -1,0 +1,7 @@
+{
+  "name": "weather-eye",
+  "description": "[通用] Get weather information by location",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

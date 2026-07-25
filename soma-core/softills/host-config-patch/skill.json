@@ -1,0 +1,7 @@
+{
+  "name": "host-config-patch",
+  "description": "[通用] Apply configuration patches to host environment",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

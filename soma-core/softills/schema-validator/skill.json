@@ -1,0 +1,7 @@
+{
+  "name": "schema-validator",
+  "description": "[开发] Validate JSON data against structural schema",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.mjs"
+}

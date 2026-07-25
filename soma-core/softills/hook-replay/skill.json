@@ -1,0 +1,7 @@
+{
+  "name": "hook-replay",
+  "description": "[通用] Replay recorded hook events",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

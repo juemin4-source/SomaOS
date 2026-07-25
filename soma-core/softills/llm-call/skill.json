@@ -1,0 +1,7 @@
+{
+  "name": "llm-call",
+  "description": "[通用] Call LLM with structured prompts",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

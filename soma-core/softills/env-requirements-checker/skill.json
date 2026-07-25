@@ -1,0 +1,7 @@
+{
+  "name": "env-requirements-checker",
+  "description": "[开发] Check environment requirements",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

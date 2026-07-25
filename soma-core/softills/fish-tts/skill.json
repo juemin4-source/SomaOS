@@ -1,0 +1,7 @@
+{
+  "name": "fish-tts",
+  "description": "[通用] Text-to-speech via Fish Audio",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

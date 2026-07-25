@@ -1,0 +1,7 @@
+{
+  "name": "e2e-summary",
+  "description": "[产品] Summarize E2E test results",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

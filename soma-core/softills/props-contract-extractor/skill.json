@@ -1,0 +1,7 @@
+{
+  "name": "props-contract-extractor",
+  "description": "[开发] Extract component props contracts",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "memory-eye",
+  "description": "[通用] Inspect and manage AI memory state",
+  "type": "softill",
+  "runtime": "node",
+  "entry": "handler.js"
+}
