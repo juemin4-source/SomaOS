@@ -12,10 +12,12 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use soma_capability::contract::{CapabilityContract, EffectClass, Reversibility};
 use soma_capability::organ::{FileOrgan, GitOrgan, ProcessOrgan};
 use soma_capability::registry::CapabilityRegistry;
+use soma_core::combo::registry::ComboRegistry;
+use soma_core::combo::review::review_combo;
 use soma_core::policy::*;
 use soma_core::port::model_provider::ModelProvider;
 use soma_model::claim::{AdjudicationStatus, Claim, ClaimAdjudicator, ClaimType};
@@ -24,14 +26,25 @@ use soma_model::types::{SomaModelEvent, SomaModelRequest, ToolDefinition, ToolCa
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long)]
-    mode: String,              // simulate | real-baseline | real-soma
-    #[arg(long)]
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[arg(long, default_value = "simulate")]
+    mode: String,
+    #[arg(long, default_value = "./fixtures/gate-bug-repo")]
     fixture: PathBuf,
     #[arg(long, default_value = "R1")]
     scenario: String,
     #[arg(long, default_value = "8")]
     max_turns: u32,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// List available Combos
+    ComboList,
+    /// Show Combo details
+    ComboInfo { id: String },
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -549,12 +562,59 @@ async fn simulate_f6(fixture: &PathBuf, ev: &mut EvidenceTracker) {
 // Main
 // ════════════════════════════════════════════════════════════════
 
+fn build_combo_registry() -> ComboRegistry {
+    let mut reg = ComboRegistry::new();
+    reg.register(review_combo());
+    reg
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+
+    // Handle subcommands first
+    if let Some(cmd) = &args.command {
+        let reg = build_combo_registry();
+        match cmd {
+            Commands::ComboList => {
+                println!("Available Combos:");
+                println!("{:<12} {:<25} {}", "ID", "Name", "Description");
+                println!("{}", "-".repeat(80));
+                for combo in reg.list() {
+                    println!("{:<12} {:<25} {}", combo.id, combo.name, &combo.description[..combo.description.len().min(50)]);
+                }
+                println!("\nTotal: {} Combo(s)", reg.list().len());
+                return;
+            }
+            Commands::ComboInfo { id } => {
+                match reg.get(id) {
+                    Some(combo) => {
+                        println!("Combo: {} ({})", combo.name, combo.id);
+                        println!("Description: {}", combo.description);
+                        println!("\nWhen to use:");
+                        for w in &combo.when_to_use { println!("  - {}", w); }
+                        println!("\nSkills ({}):", combo.skills.len());
+                        for s in &combo.skills { println!("  - {}: {}", s.id, s.name); }
+                        println!("\nSoftills ({}):", combo.softills.len());
+                        for s in &combo.softills { println!("  - {}: {}", s.id, s.name); }
+                        println!("\nOrgan dependencies:");
+                        for o in &combo.organ_dependencies { println!("  - {}", o); }
+                        println!("\nOutputs:");
+                        for o in &combo.outputs { println!("  - {}", o); }
+                        println!("\nCompletion criteria:");
+                        for c in &combo.completion_criteria { println!("  - {}", c); }
+                    }
+                    None => eprintln!("Combo '{}' not found", id),
+                }
+                return;
+            }
+        }
+    }
+
+    // Legacy mode dispatch
     match args.mode.as_str() {
         m if m.starts_with("real-") => run_real(&args).await,
         "simulate" => run_simulate(&args).await,
-        _ => eprintln!("unknown mode: {}", args.mode),
+        _ => eprintln!("Usage: gate-runner --mode <simulate|real-baseline|real-soma> OR gate-runner combo-list"),
     }
 }
