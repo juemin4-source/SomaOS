@@ -2030,29 +2030,14 @@ pub fn git_tools_softill() -> Softill {
 }
 
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// 返回 softill_library 中所有 Softill 实例
+pub fn all_softills() -> Vec<Softill> {
+    build_all_softills()
+}
 
-    #[test]
-    fn test_softill_count() {
-        let softills = build_all_softills();
-        assert_eq!(softills.len(), 125, "所有 vendored JS softills 数量");
-    }
-
-    #[test]
-    fn test_each_softill_has_required_fields() {
-        for s in &build_all_softills() {
-            assert!(!s.id.is_empty(), "id 不能为空");
-            assert!(!s.name.is_empty(), "name for {} 不能为空", s.id);
-            assert!(!s.description.is_empty(), "description for {} 不能为空", s.id);
-            assert!(!s.effect.is_empty(), "effect for {} 不能为空", s.id);
-        }
-    }
-
-    fn build_all_softills() -> Vec<Softill> {
-        vec![
-            api_client_generator_softill(),
+fn build_all_softills() -> Vec<Softill> {
+    vec![
+        api_client_generator_softill(),
             api_contract_extractor_softill(),
             auth_policy_map_softill(),
             backend_route_map_softill(),
@@ -2178,5 +2163,25 @@ mod tests {
             xberg_adapter_softill(),
             zlib_eye_softill(),
         ]
+    }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_softill_count() {
+        let softills = all_softills();
+        assert_eq!(softills.len(), 125, "all vendored JS softills count");
+    }
+
+    #[test]
+    fn test_each_softill_has_required_fields() {
+        for s in &all_softills() {
+            assert!(!s.id.is_empty(), "id empty");
+            assert!(!s.name.is_empty(), "name empty for {}", s.id);
+            assert!(!s.description.is_empty(), "desc empty for {}", s.id);
+            assert!(!s.effect.is_empty(), "effect empty for {}", s.id);
+        }
     }
 }

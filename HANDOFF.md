@@ -1,7 +1,7 @@
 # SomaOS Handoff — 2026-07-25
 
-> **会话终点:** 0.8 Gate A ✅ B ✅ C ✅ D ✅ E ✅ — 92 tests
-> **下一目标:** 0.9 产品化 — 管线运行时执行器 + 桌面端集成
+> **会话终点:** 0.85 Gate A: 外部插件兼容 ✅ 旧资产批量接入 ✅ — 100 tests
+> **下一目标:** 0.85 Gate B: 能力缺口发现 → 先搜索复用 → 再生成 → 验证晋升
 
 ---
 
@@ -12,7 +12,8 @@
 0.3  Review Combo               ✅ GATE-SOMA-FIRST-COMBO
 0.5  Investigate → Fix → Review ✅ 真实 dogfood 验证
 0.7  项目接管与工作连续性          ✅ T1-T3 验证
-0.8  gstack 全研发链              ✅ Gate A-E 全部完成 — 92 tests
+0.8  完整研发主链                 ✅ Gate A-E 全部完成 — 92 tests
+0.85 Softill 开放与生长           ⬜ Gate A 过半，B 待推进
 0.9  产品化                      ⬜
 1.0  日常可用                    ⬜
 ```

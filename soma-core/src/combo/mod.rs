@@ -26,3 +26,4 @@ pub mod pipeline_display;
 pub mod routing;
 pub mod figma;
 pub mod softill_library;
+pub mod capability_searcher;
