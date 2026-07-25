@@ -12,6 +12,7 @@ pub mod combo;
 pub mod registry;
 pub mod review;
 pub mod investigate;
+pub mod office_hours;
 pub mod takeover;
 pub mod task;
 pub mod work_state;
