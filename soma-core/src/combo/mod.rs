@@ -11,3 +11,4 @@ pub mod softill;
 pub mod combo;
 pub mod registry;
 pub mod review;
+pub mod task;
