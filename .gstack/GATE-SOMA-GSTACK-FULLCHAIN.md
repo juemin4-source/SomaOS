@@ -83,15 +83,43 @@ SomaOS 自己的中等规模功能，完整走一遍主链。期间至少出现�
 
 ---
 
-## 四、验收标准
+## 四、验收标准（诚实分级）
 
-1. 8 个主链 Combo 全部注册（可发现、可选择）
-2. 至少 4 个 Combo 的产物可被后续 Combo 消费
-3. 用户不需要人工复制 Spec、Plan、Findings 或测试结果
-4. Soma 能根据产物状态自动建议或执行阶段跳转
-5. 至少成功完成一次真实 Dogfood
-6. Dogfood 出现至少一次阶段回退或调整
-7. 不支持 Canary/Deploy 时不阻塞主链
+### Gate A：Combo 定义与登记 ✅
+九个主链 Combo 的 Rust struct 定义、中文方法论、注册到 ComboRegistry。
+当前状态：✅ 已完成（52 测试）
+
+### Gate B：依赖与真实执行 ⬜
+每个 Combo 声明真实的 Softill 和 Organ 依赖，并能通过 Runtime 管线调用。
+当前状态：⬜ 仅 review / investigate / project-takeover 有 Softill 绑定，其余 6 个为"纯方法论"
+
+### Gate C：跨 Combo 产物传递 ⬜
+上一阶段的产物自动成为下一阶段的输入，用户不需要复制粘贴。
+当前状态：⬜ 产物类型已定义，传递管线未实现
+
+### Gate D：路由、回退与用户决策 ⬜
+Soma 能根据产物状态决定继续、跳过、回退、阻塞。
+当前状态：⬜
+
+### Gate E：真实功能全链 Dogfood ⬜
+用一个真实功能完整走一遍 office-hours → spec → plan → plan-review → implement → review → qa → ship，至少出现一次真实回退。
+当前状态：⬜
+
+---
+
+## 五、GATE-SOMA-FULL-CHAIN-001
+
+### 目标
+拿 SomaOS 自己的一个中等功能，从头到尾走通全链。
+
+### 必须满足
+1. 用户不用复制上一阶段的文本
+2. 每个阶段能读取上一阶段产物
+3. 实施阶段真实调用 Softill 和 Organ
+4. Review/QA 的失败能退回实施
+5. Ship 必须读取最新测试与 Review 结果
+6. 至少发生一次真实调整或回退
+7. 最终产生一个真实提交或可交付增量
 
 ---
 
