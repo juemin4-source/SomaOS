@@ -2,7 +2,7 @@
 ///
 /// 自动生成于 SomaOS 旧资产批量接入。
 /// 每个 Softill 有完整 id、name、description、invocation 和 effect。
-/// input_schema 为最小占位，可根据实际 handler 补充细化。
+/// input_schema 为最小占位，tags 从名称和描述自动提取，可根据实际场景补充细化。
 
 // 集中式 Softill 库 — 所有 vendored JS Script Softill
 // 自动生成。补充 input_schema 和 output_description 时编辑此文件。
@@ -24,6 +24,7 @@ pub fn api_client_generator_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["api".into(), "client".into(), "code".into(), "contracts".into(), "from".into(), "generate".into(), "generator".into()],
         output_description: "[开发] Generate API client code from contracts 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -40,6 +41,7 @@ pub fn api_contract_extractor_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["api".into(), "code".into(), "contract".into(), "contracts".into(), "extract".into(), "extractor".into(), "from".into(), "source".into()],
         output_description: "[开发] Extract API contracts from source code 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -56,6 +58,7 @@ pub fn auth_policy_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "auth".into(), "authentication".into(), "authorization".into(), "map".into(), "policies".into(), "policy".into()],
         output_description: "[开发] Map authentication and authorization policies 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -72,6 +75,7 @@ pub fn backend_route_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "backend".into(), "handlers".into(), "map".into(), "route".into(), "routes".into()],
         output_description: "[开发] Map backend routes and handlers 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -88,6 +92,7 @@ pub fn build_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "build".into(), "eye".into(), "inspect".into(), "output".into(), "structure".into()],
         output_description: "[开发] Inspect build output and structure 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -104,6 +109,7 @@ pub fn cache_manager_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "cache".into(), "caches".into(), "data".into(), "manage".into(), "manager".into(), "temporary".into()],
         output_description: "[开发] Manage caches and temporary data 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -120,6 +126,7 @@ pub fn code_review_diff_reader_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "code".into(), "diff".into(), "for".into(), "git".into(), "read".into(), "reader".into(), "review".into()],
         output_description: "[开发] Read and structure git diff for code review 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -136,6 +143,7 @@ pub fn code_review_evidence_collector_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "code".into(), "collect".into(), "collector".into(), "evidence".into(), "organize".into(), "review".into()],
         output_description: "[开发] Collect and organize code review evidence 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -152,6 +160,7 @@ pub fn code_review_pattern_matcher_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["code".into(), "during".into(), "match".into(), "matcher".into(), "pattern".into(), "patterns".into(), "review".into()],
         output_description: "[开发] Match code patterns during code review 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -168,6 +177,7 @@ pub fn code_review_report_generator_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["code".into(), "generate".into(), "generator".into(), "report".into(), "reports".into(), "review".into(), "structured".into()],
         output_description: "[开发] Generate structured code review reports 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -184,6 +194,7 @@ pub fn code_search_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "code".into(), "codebase".into(), "for".into(), "patterns".into(), "search".into(), "symbols".into()],
         output_description: "[开发] Search codebase for patterns and symbols 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -200,6 +211,7 @@ pub fn codebase_search_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["codebase".into(), "codebase.search".into(), "content".into(), "matching".into(), "pattern".into(), "regex".into(), "search".into(), "with".into()],
         output_description: "[开发] Search codebase content with regex pattern matching 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -216,6 +228,7 @@ pub fn component_inventory_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "catalog".into(), "component".into(), "file".into(), "inventory".into(), "project".into(), "scan".into(), "structure".into()],
         output_description: "[开发] Scan and catalog project structure by file type 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -232,6 +245,7 @@ pub fn computer_hand_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "computer".into(), "control".into(), "hand".into(), "keyboard".into(), "mouse".into(), "programmatically".into()],
         output_description: "[开发] Control keyboard and mouse programmatically 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -248,6 +262,7 @@ pub fn contract_diff_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["api".into(), "breaking".into(), "changes".into(), "compare".into(), "contract".into(), "contracts".into(), "diff".into(), "for".into()],
         output_description: "[开发] Compare API contracts for breaking changes 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -264,6 +279,7 @@ pub fn db_crud_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["crud".into(), "database".into(), "operations".into(), "perform".into()],
         output_description: "[开发] Perform database CRUD operations 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -280,6 +296,7 @@ pub fn db_schema_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "database".into(), "map".into(), "relationships".into(), "schema".into()],
         output_description: "[开发] Map database schema and relationships 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -296,6 +313,7 @@ pub fn diff_review_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "changes".into(), "detect".into(), "diff".into(), "git".into(), "review".into(), "risks".into(), "scope".into()],
         output_description: "[开发] Review git diff and detect scope changes and risks 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -312,6 +330,7 @@ pub fn endpoint_smoke_tester_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["api".into(), "endpoint".into(), "endpoints".into(), "smoke".into(), "test".into(), "tester".into()],
         output_description: "[开发] Smoke test API endpoints 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -328,6 +347,7 @@ pub fn env_requirements_checker_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["check".into(), "checker".into(), "env".into(), "environment".into(), "requirements".into()],
         output_description: "[开发] Check environment requirements 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -344,6 +364,7 @@ pub fn error_contract_extractor_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["code".into(), "contract".into(), "contracts".into(), "error".into(), "extract".into(), "extractor".into(), "from".into()],
         output_description: "[开发] Extract error contracts from code 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -360,6 +381,7 @@ pub fn file_patch_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["apply".into(), "dry-run".into(), "file".into(), "modifications".into(), "patch".into(), "precise".into(), "support".into(), "with".into()],
         output_description: "[开发] Apply precise file modifications with dry-run support 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -376,6 +398,7 @@ pub fn fixture_sync_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["fixture".into(), "fixtures".into(), "source".into(), "sync".into(), "test".into(), "with".into()],
         output_description: "[开发] Sync test fixtures with source 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -392,6 +415,7 @@ pub fn format_code_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["code".into(), "format".into(), "language-specific".into(), "source".into(), "tools".into(), "with".into()],
         output_description: "[开发] Format source code with language-specific tools 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -408,6 +432,7 @@ pub fn formula_engine_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "engine".into(), "evaluate".into(), "expressions".into(), "formula".into(), "formulas".into(), "mathematical".into()],
         output_description: "[开发] Evaluate mathematical formulas and expressions 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -424,6 +449,7 @@ pub fn frontend_api_usage_scanner_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["api".into(), "code".into(), "for".into(), "frontend".into(), "patterns".into(), "scan".into(), "scanner".into(), "usage".into()],
         output_description: "[开发] Scan frontend code for API usage patterns 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -440,6 +466,7 @@ pub fn frontend_route_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "frontend".into(), "map".into(), "navigation".into(), "route".into(), "routes".into()],
         output_description: "[开发] Map frontend routes and navigation 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -456,6 +483,7 @@ pub fn fullstack_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["architecture".into(), "fullstack".into(), "generate".into(), "map".into()],
         output_description: "[开发] Generate fullstack architecture map 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -472,6 +500,7 @@ pub fn html_parse_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "data".into(), "extract".into(), "from".into(), "html".into(), "parse".into(), "structured".into()],
         output_description: "[开发] Parse and extract structured data from HTML 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -488,6 +517,7 @@ pub fn integration_check_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["check".into(), "component".into(), "integration".into(), "readiness".into()],
         output_description: "[开发] Check component integration readiness 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -504,6 +534,7 @@ pub fn json_query_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "data".into(), "json".into(), "query".into(), "transform".into()],
         output_description: "[开发] Query and transform JSON data 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -520,6 +551,7 @@ pub fn keymouse_adapter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["adapter".into(), "for".into(), "input".into(), "keyboard/mouse".into(), "keymouse".into(), "simulation".into()],
         output_description: "[开发] Adapter for keyboard/mouse input simulation 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -536,6 +568,7 @@ pub fn migration_safety_checker_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "check".into(), "checker".into(), "impact".into(), "migration".into(), "safety".into()],
         output_description: "[开发] Check migration safety and impact 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -552,6 +585,7 @@ pub fn mock_data_generator_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["data".into(), "from".into(), "generate".into(), "generator".into(), "mock".into(), "schema".into()],
         output_description: "[开发] Generate mock data from schema 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -568,6 +602,7 @@ pub fn pipe_runner_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["dag-based".into(), "execute".into(), "pipe".into(), "pipeline".into(), "runner".into(), "softills".into()],
         output_description: "[开发] Execute DAG-based pipeline of softills 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -584,6 +619,7 @@ pub fn props_contract_extractor_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["component".into(), "contract".into(), "contracts".into(), "extract".into(), "extractor".into(), "props".into()],
         output_description: "[开发] Extract component props contracts 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -600,6 +636,7 @@ pub fn safe_rename_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["across".into(), "codebase".into(), "rename".into(), "safe".into(), "safely".into(), "symbols".into()],
         output_description: "[开发] Safely rename symbols across codebase 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -616,6 +653,7 @@ pub fn schema_validator_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["against".into(), "data".into(), "json".into(), "schema".into(), "structural".into(), "validate".into(), "validator".into()],
         output_description: "[开发] Validate JSON data against structural schema 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -632,6 +670,7 @@ pub fn scoring_engine_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "criteria".into(), "engine".into(), "items".into(), "rank".into(), "score".into(), "scoring".into()],
         output_description: "[开发] Score and rank items by criteria 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -648,6 +687,7 @@ pub fn service_dependency_map_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["dependencies".into(), "dependency".into(), "map".into(), "service".into()],
         output_description: "[开发] Map service dependencies 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -664,6 +704,7 @@ pub fn shell_hand_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["commands".into(), "execute".into(), "hand".into(), "safely".into(), "shell".into()],
         output_description: "[开发] Execute shell commands safely 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -680,6 +721,7 @@ pub fn stale_context_detector_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["context".into(), "detect".into(), "detector".into(), "outdated".into(), "stale".into()],
         output_description: "[开发] Detect stale or outdated context 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -696,6 +738,7 @@ pub fn state_flow_scanner_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analyze".into(), "and".into(), "flow".into(), "scan".into(), "scanner".into(), "state".into()],
         output_description: "[开发] Scan and analyze state flow 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -712,6 +755,7 @@ pub fn task_ledger_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["crud".into(), "ledger".into(), "operations".into(), "state".into(), "task".into(), "track".into(), "with".into()],
         output_description: "[开发] Track task state with 11 CRUD operations 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -728,6 +772,7 @@ pub fn test_selector_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "prioritize".into(), "relevant".into(), "select".into(), "selector".into(), "test".into(), "tests".into()],
         output_description: "[开发] Select and prioritize relevant tests 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -744,6 +789,7 @@ pub fn token_counter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["count".into(), "counter".into(), "files".into(), "text".into(), "token".into(), "tokens".into()],
         output_description: "[开发] Count tokens in text or files 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -760,6 +806,7 @@ pub fn visual_pipeline_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["automation".into(), "branching".into(), "pipeline".into(), "visual".into(), "with".into()],
         output_description: "[开发] Visual automation pipeline with branching 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -780,6 +827,7 @@ pub fn collect_context_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["collect".into(), "context".into(), "for".into(), "handoff".into(), "project".into()],
         output_description: "[产品] Collect project context for handoff 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -796,6 +844,7 @@ pub fn combo_init_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["combo".into(), "init".into(), "initialize".into(), "orchestration".into(), "plans".into()],
         output_description: "[产品] Initialize combo orchestration plans 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -812,6 +861,7 @@ pub fn e2e_summary_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["e2e".into(), "results".into(), "summarize".into(), "summary".into(), "test".into()],
         output_description: "[产品] Summarize E2E test results 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -828,6 +878,7 @@ pub fn handoff_writer_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["documents".into(), "handoff".into(), "structured".into(), "write".into(), "writer".into()],
         output_description: "[产品] Write structured handoff documents 的执行结果。".into(),
         effect: "write-local".into(),
     }
@@ -844,6 +895,7 @@ pub fn prd_slicer_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["chunks".into(), "into".into(), "prd".into(), "slice".into(), "slicer".into(), "version-scoped".into()],
         output_description: "[产品] Slice PRD into version-scoped chunks 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -860,6 +912,7 @@ pub fn project_baseline_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "baseline".into(), "baselines".into(), "compare".into(), "establish".into(), "project".into()],
         output_description: "[产品] Establish and compare project baselines 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -876,6 +929,7 @@ pub fn project_state_manager_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "manage".into(), "manager".into(), "project".into(), "state".into(), "track".into()],
         output_description: "[产品] Track and manage project state 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -892,6 +946,7 @@ pub fn receipt_collect_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["after".into(), "and".into(), "collect".into(), "completion".into(), "evidence".into(), "execution".into(), "receipt".into(), "task".into()],
         output_description: "[产品] Collect execution receipt and evidence after task completion 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -908,6 +963,7 @@ pub fn register_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["asset".into(), "register".into(), "registry".into(), "softill".into()],
         output_description: "[产品] Register softill or asset to registry 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -924,6 +980,7 @@ pub fn report_stitch_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["into".into(), "multiple".into(), "report".into(), "reports".into(), "stitch".into(), "summary".into()],
         output_description: "[产品] Stitch multiple reports into summary 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -940,6 +997,7 @@ pub fn research_manager_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "findings".into(), "manage".into(), "manager".into(), "research".into(), "traces".into()],
         output_description: "[产品] Manage research traces and findings 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -956,6 +1014,7 @@ pub fn runtime_report_writer_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["execution".into(), "generate".into(), "report".into(), "reports".into(), "runtime".into(), "writer".into()],
         output_description: "[产品] Generate runtime execution reports 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -972,6 +1031,7 @@ pub fn scaffold_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["assets".into(), "for".into(), "generate".into(), "new".into(), "scaffold".into(), "scaffold/skeleton".into()],
         output_description: "[产品] Generate scaffold/skeleton for new assets 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -988,6 +1048,7 @@ pub fn softill_doctor_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "diagnose".into(), "doctor".into(), "fix".into(), "issues".into(), "softill".into()],
         output_description: "[产品] Diagnose and fix softill issues 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1004,6 +1065,7 @@ pub fn softill_init_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["init".into(), "initialize".into(), "new".into(), "scaffold".into(), "softill".into()],
         output_description: "[产品] Initialize new softill scaffold 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1020,6 +1082,7 @@ pub fn task_card_issue_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "card".into(), "create".into(), "issue".into(), "lifecycle".into(), "management".into(), "task".into(), "with".into()],
         output_description: "[产品] Create and issue a task card with lifecycle management 的执行结果。".into(),
         effect: "write-local".into(),
     }
@@ -1036,6 +1099,7 @@ pub fn template_fill_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["data".into(), "fill".into(), "template".into(), "templates".into(), "variable".into(), "with".into()],
         output_description: "[产品] Fill templates with variable data 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1052,6 +1116,7 @@ pub fn worker_spawn_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["agent".into(), "claude".into(), "code".into(), "external".into(), "inline".into(), "session".into(), "spawn".into(), "worker".into()],
         output_description: "[产品] Spawn an external worker Claude Code session (no worktree, no inline agent) 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1068,6 +1133,7 @@ pub fn worktree_create_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["create".into(), "for".into(), "git".into(), "isolation".into(), "task".into(), "worktree".into()],
         output_description: "[产品] Create git worktree for task isolation 的执行结果。".into(),
         effect: "write-local".into(),
     }
@@ -1088,6 +1154,7 @@ pub fn balance_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analyze".into(), "and".into(), "balance".into(), "composition".into(), "eye".into(), "visual".into()],
         output_description: "[设计] Analyze visual balance and composition 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1104,6 +1171,7 @@ pub fn design_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analyze".into(), "and".into(), "design".into(), "extract".into(), "eye".into(), "references".into(), "tokens".into(), "visual".into()],
         output_description: "[设计] Analyze design references and extract visual tokens 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1120,6 +1188,7 @@ pub fn design_thief_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "design".into(), "extract".into(), "from".into(), "screenshots".into(), "thief".into(), "tokens".into(), "visuals".into()],
         output_description: "[设计] Extract design tokens from visuals and screenshots 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1136,6 +1205,7 @@ pub fn design_token_auditor_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "audit".into(), "auditor".into(), "consistency".into(), "design".into(), "token".into(), "usage".into()],
         output_description: "[设计] Audit design token usage and consistency 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1152,6 +1222,7 @@ pub fn image_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analyze".into(), "and".into(), "content".into(), "eye".into(), "image".into(), "metadata".into()],
         output_description: "[设计] Analyze image content and metadata 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1168,6 +1239,7 @@ pub fn screen_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analyze".into(), "and".into(), "capture".into(), "content".into(), "eye".into(), "screen".into()],
         output_description: "[设计] Capture and analyze screen content 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1184,6 +1256,7 @@ pub fn shadcn_pattern_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "apply".into(), "component".into(), "generate".into(), "pattern".into(), "patterns".into(), "shadcn".into()],
         output_description: "[设计] Generate and apply shadcn UI component patterns 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1200,6 +1273,7 @@ pub fn ui_screenshot_runner_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["automated".into(), "run".into(), "runner".into(), "screenshot".into(), "tests".into()],
         output_description: "[设计] Run automated UI screenshot tests 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1216,6 +1290,7 @@ pub fn visual_diff_checker_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "checker".into(), "compare".into(), "detect".into(), "diff".into(), "differences".into(), "screenshots".into(), "visual".into()],
         output_description: "[设计] Compare screenshots and detect visual differences 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1236,6 +1311,7 @@ pub fn capcut_draft_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["capcut".into(), "draft".into(), "drafts".into(), "generate".into(), "video".into()],
         output_description: "[通用] Generate CapCut video drafts 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1252,6 +1328,7 @@ pub fn combo_runner_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["combo".into(), "combo-runner".into(), "runner".into()],
         output_description: "combo-runner 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1268,6 +1345,7 @@ pub fn comfy_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["comfy".into(), "comfyui".into(), "eye".into(), "integration".into(), "workflow".into()],
         output_description: "[通用] ComfyUI workflow integration 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1284,6 +1362,7 @@ pub fn contract_compare_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["compare".into(), "compatibility".into(), "contract".into(), "contracts".into(), "for".into(), "interface".into(), "two".into()],
         output_description: "[通用] Compare two interface contracts for compatibility 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1300,6 +1379,7 @@ pub fn country_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "country".into(), "data".into(), "eye".into(), "information".into(), "look".into()],
         output_description: "[通用] Look up country data and information 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1316,6 +1396,7 @@ pub fn creative_writing_combo_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["combo".into(), "creative".into(), "generation".into(), "writing".into()],
         output_description: "[通用] Creative writing generation 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1332,6 +1413,7 @@ pub fn crypto_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "crypto".into(), "cryptocurrency".into(), "data".into(), "eye".into(), "prices".into(), "query".into()],
         output_description: "[通用] Query cryptocurrency prices and data 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1348,6 +1430,7 @@ pub fn desktop_native_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["desktop".into(), "native".into(), "operations".into()],
         output_description: "[通用] Desktop native OS operations 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1364,6 +1447,7 @@ pub fn dict_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "definitions".into(), "dict".into(), "eye".into(), "look".into(), "translations".into(), "word".into()],
         output_description: "[通用] Look up word definitions and translations 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1380,6 +1464,7 @@ pub fn file_to_md_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["convert".into(), "file".into(), "files".into(), "format".into(), "markdown".into()],
         output_description: "[通用] Convert files to markdown format 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1396,6 +1481,7 @@ pub fn fish_tts_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["audio".into(), "fish".into(), "text-to-speech".into(), "tts".into(), "via".into()],
         output_description: "[通用] Text-to-speech via Fish Audio 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1412,6 +1498,7 @@ pub fn flue_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["applescript".into(), "cep".into(), "com".into(), "eye".into(), "flue".into(), "http".into(), "三种桥接".into(), "桥接层操控桌面软件（photoshop、audition、blender、office".into()],
         output_description: "[通用] 通过 Flue 桥接层操控桌面软件（Photoshop、Audition、Blender、Office 等）。支持 COM / AppleScript / CEP HTTP 三种桥接。 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -1428,6 +1515,7 @@ pub fn forge_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "capabilities".into(), "craft".into(), "forge".into(), "from".into(), "new".into(), "traces".into()],
         output_description: "[通用] Forge and craft new capabilities from traces 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1444,6 +1532,7 @@ pub fn gh_find_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "code".into(), "find".into(), "github".into(), "repositories".into(), "search".into()],
         output_description: "[通用] Search GitHub repositories and code 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1460,6 +1549,7 @@ pub fn github_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["eye".into(), "github".into(), "inspect".into(), "metadata".into(), "repository".into()],
         output_description: "[通用] Inspect GitHub repository metadata 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1476,6 +1566,7 @@ pub fn hn_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "browse".into(), "comments".into(), "eye".into(), "hacker".into(), "news".into(), "stories".into()],
         output_description: "[通用] Browse Hacker News stories and comments 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1492,6 +1583,7 @@ pub fn hook_install_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["event".into(), "hook".into(), "hooks".into(), "install".into(), "soma".into()],
         output_description: "[通用] Install Soma event hooks 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1508,6 +1600,7 @@ pub fn hook_replay_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["events".into(), "hook".into(), "recorded".into(), "replay".into()],
         output_description: "[通用] Replay recorded hook events 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1524,6 +1617,7 @@ pub fn hook_scaffold_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["code".into(), "generate".into(), "hook".into(), "scaffold".into(), "skeleton".into()],
         output_description: "[通用] Generate hook skeleton code 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1540,6 +1634,7 @@ pub fn hook_validate_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["configuration".into(), "hook".into(), "validate".into()],
         output_description: "[通用] Validate hook configuration 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1556,6 +1651,7 @@ pub fn host_config_patch_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["apply".into(), "config".into(), "configuration".into(), "environment".into(), "host".into(), "patch".into(), "patches".into()],
         output_description: "[通用] Apply configuration patches to host environment 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1572,6 +1668,7 @@ pub fn host_live_test_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["environment".into(), "host".into(), "live".into(), "run".into(), "test".into(), "tests".into()],
         output_description: "[通用] Run live tests on host environment 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1588,6 +1685,7 @@ pub fn host_probe_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "environment".into(), "host".into(), "inspect".into(), "probe".into()],
         output_description: "[通用] Probe and inspect host environment 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1604,6 +1702,7 @@ pub fn llm_call_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["call".into(), "llm".into(), "prompts".into(), "structured".into(), "with".into()],
         output_description: "[通用] Call LLM with structured prompts 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1620,6 +1719,7 @@ pub fn load_prompt_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "load".into(), "manage".into(), "prompt".into(), "templates".into()],
         output_description: "[通用] Load and manage prompt templates 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1636,6 +1736,7 @@ pub fn maker_scoring_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["maker".into(), "scoring".into(), "变量返回".into(), "得分及杠杆分析".into(), "造物公式评分引擎".into()],
         output_description: "[通用] 造物公式评分引擎 — 接收 8 变量返回 W 得分及杠杆分析 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1652,6 +1753,7 @@ pub fn md_process_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "content".into(), "markdown".into(), "process".into(), "transform".into()],
         output_description: "[通用] Process and transform markdown content 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1668,6 +1770,7 @@ pub fn memory_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "eye".into(), "inspect".into(), "manage".into(), "memory".into(), "state".into()],
         output_description: "[通用] Inspect and manage AI memory state 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1684,6 +1787,7 @@ pub fn meta_softill_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["combo".into(), "combo。audit".into(), "evidence），combo-scaffold".into(), "handler".into(), "meta".into(), "skill.md），combo-list".into(), "softill".into(), "softill：管理其他".into()],
         output_description: "[通用] 元 softill：管理其他 softill 和 combo 的工具。blueprint 模式生成新 softill 骨架（含 handler + 输入验证 + try/catch + evidence），combo-scaffold 模式生成新 combo 定义（combo.yaml + SKILL.md），combo-list 列出所有 combo。audit 审查 softill 健康，discover 扫描发现，register 注册。需要创建/修改 softill 或 combo 时用这个工具。 的执行结果。".into(),
         effect: "write-local".into(),
     }
@@ -1700,6 +1804,7 @@ pub fn mingli_bazi_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analysis".into(), "bazi".into(), "chinese".into(), "fortune".into(), "mingli".into()],
         output_description: "[通用] Chinese BaZi fortune analysis 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1716,6 +1821,7 @@ pub fn mingli_ziwei_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["analysis".into(), "chinese".into(), "fortune".into(), "mingli".into(), "ziwei".into()],
         output_description: "[通用] Chinese ZiWei fortune analysis 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1732,6 +1838,7 @@ pub fn ocr_adapter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["adapter".into(), "extraction".into(), "from".into(), "images".into(), "ocr".into(), "text".into()],
         output_description: "[通用] OCR text extraction from images 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1748,6 +1855,7 @@ pub fn parse_output_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["from".into(), "output".into(), "parse".into(), "structured".into(), "text".into()],
         output_description: "[通用] Parse structured output from text 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1764,6 +1872,7 @@ pub fn pattern_research_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "document".into(), "pattern".into(), "patterns".into(), "research".into()],
         output_description: "[通用] Research and document patterns 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1780,6 +1889,7 @@ pub fn permission_compile_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "compile".into(), "configurations".into(), "permission".into(), "validate".into()],
         output_description: "[通用] Compile and validate permission configurations 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1796,6 +1906,7 @@ pub fn poetry_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "browse".into(), "eye".into(), "poetry".into(), "retrieve".into()],
         output_description: "[通用] Browse and retrieve poetry 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1812,6 +1923,7 @@ pub fn quote_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "eye".into(), "quote".into(), "quotes".into(), "retrieve".into(), "sayings".into()],
         output_description: "[通用] Retrieve quotes and sayings 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1828,6 +1940,7 @@ pub fn skylos_adapter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["adapter".into(), "platform".into(), "skylos".into()],
         output_description: "[通用] Skylos platform adapter 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1844,6 +1957,7 @@ pub fn social_content_converter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["between".into(), "content".into(), "convert".into(), "converter".into(), "platforms".into(), "social".into()],
         output_description: "[通用] Convert content between social platforms 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1860,6 +1974,7 @@ pub fn state_normalizer_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["0,1".into(), "normalize".into(), "normalizer".into(), "range".into(), "state".into(), "values".into()],
         output_description: "[通用] Normalize state values to [0,1] range 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1876,6 +1991,7 @@ pub fn threshold_registry_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["configurations".into(), "manage".into(), "registry".into(), "threshold".into()],
         output_description: "[通用] Manage threshold configurations 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
@@ -1892,6 +2008,7 @@ pub fn video_script_writer_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["script".into(), "scripts".into(), "structured".into(), "video".into(), "write".into(), "writer".into()],
         output_description: "[通用] Write structured video scripts 的执行结果。".into(),
         effect: "write-local".into(),
     }
@@ -1908,6 +2025,7 @@ pub fn weather_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["eye".into(), "get".into(), "information".into(), "location".into(), "weather".into()],
         output_description: "[通用] Get weather information by location 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1924,6 +2042,7 @@ pub fn web_fetcher_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "content".into(), "extract".into(), "fetch".into(), "fetcher".into(), "from".into(), "pages".into(), "web".into()],
         output_description: "[通用] Fetch and extract content from web pages 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -1940,6 +2059,7 @@ pub fn wechat_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["access".into(), "and".into(), "data".into(), "eye".into(), "integration".into(), "wechat".into()],
         output_description: "[通用] WeChat integration and data access 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1956,6 +2076,7 @@ pub fn writing_combo_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["combo".into(), "multi-step".into(), "workflow".into(), "writing".into()],
         output_description: "[通用] Multi-step writing workflow 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1972,6 +2093,7 @@ pub fn xberg_adapter_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["adapter".into(), "integration".into(), "platform".into(), "xberg".into()],
         output_description: "[通用] Platform integration adapter 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -1988,6 +2110,7 @@ pub fn zlib_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["download".into(), "download_http".into(), "eye".into(), "locate".into(), "search".into(), "z-library".into(), "zlib".into(), "四种模式".into()],
         output_description: "[通用] 搜索、定位和下载 Z-Library 离线种子档案中的书籍。支持 search / locate / download / download_http 四种模式。 的执行结果。".into(),
         effect: "network-read-only".into(),
     }
@@ -2008,6 +2131,7 @@ pub fn file_eye_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["and".into(), "deprecated".into(), "eye".into(), "file".into(), "inspection".into(), "mcp".into(), "search".into(), "soma_file_search".into()],
         output_description: "[DEPRECATED] 请使用 soma_file_search MCP 工具代替。原功能：Fast file system search and inspection 的执行结果。".into(),
         effect: "read-only".into(),
     }
@@ -2024,13 +2148,15 @@ pub fn git_tools_softill() -> Softill {
             interpreter: "node".into(),
         },
         input_schema: serde_json::json!({}),
+        tags: vec!["deprecated".into(), "git".into(), "json".into(), "mcp".into(), "output".into(), "repo".into(), "soma_repo_status/log/diff/branch".into(), "status/diff/log/branch".into()],
         output_description: "[DEPRECATED] 请使用 repo transport 中的 soma_repo_status/log/diff/branch MCP 工具代替。原功能：Git status/diff/log/branch with structured JSON output 的执行结果。handler 包含输入/输出说明。".into(),
         effect: "read-only".into(),
     }
 }
 
 
-/// 返回 softill_library 中所有 Softill 实例
+
+/// Return all Softill instances from this library
 pub fn all_softills() -> Vec<Softill> {
     build_all_softills()
 }
@@ -2038,132 +2164,132 @@ pub fn all_softills() -> Vec<Softill> {
 fn build_all_softills() -> Vec<Softill> {
     vec![
         api_client_generator_softill(),
-            api_contract_extractor_softill(),
-            auth_policy_map_softill(),
-            backend_route_map_softill(),
-            balance_eye_softill(),
-            build_eye_softill(),
-            cache_manager_softill(),
-            capcut_draft_softill(),
-            codebase_search_softill(),
-            code_review_diff_reader_softill(),
-            code_review_evidence_collector_softill(),
-            code_review_pattern_matcher_softill(),
-            code_review_report_generator_softill(),
-            code_search_softill(),
-            collect_context_softill(),
-            combo_init_softill(),
-            combo_runner_softill(),
-            comfy_eye_softill(),
-            component_inventory_softill(),
-            computer_hand_softill(),
-            contract_compare_softill(),
-            contract_diff_softill(),
-            country_eye_softill(),
-            creative_writing_combo_softill(),
-            crypto_eye_softill(),
-            db_crud_softill(),
-            db_schema_map_softill(),
-            design_eye_softill(),
-            design_thief_softill(),
-            design_token_auditor_softill(),
-            desktop_native_softill(),
-            dict_eye_softill(),
-            diff_review_softill(),
-            e2e_summary_softill(),
-            endpoint_smoke_tester_softill(),
-            env_requirements_checker_softill(),
-            error_contract_extractor_softill(),
-            file_eye_softill(),
-            file_patch_softill(),
-            file_to_md_softill(),
-            fish_tts_softill(),
-            fixture_sync_softill(),
-            flue_eye_softill(),
-            forge_softill(),
-            format_code_softill(),
-            formula_engine_softill(),
-            frontend_api_usage_scanner_softill(),
-            frontend_route_map_softill(),
-            fullstack_map_softill(),
-            gh_find_softill(),
-            github_eye_softill(),
-            git_tools_softill(),
-            handoff_writer_softill(),
-            hn_eye_softill(),
-            hook_install_softill(),
-            hook_replay_softill(),
-            hook_scaffold_softill(),
-            hook_validate_softill(),
-            host_config_patch_softill(),
-            host_live_test_softill(),
-            host_probe_softill(),
-            html_parse_softill(),
-            image_eye_softill(),
-            integration_check_softill(),
-            json_query_softill(),
-            keymouse_adapter_softill(),
-            llm_call_softill(),
-            load_prompt_softill(),
-            maker_scoring_softill(),
-            md_process_softill(),
-            memory_eye_softill(),
-            meta_softill_softill(),
-            migration_safety_checker_softill(),
-            mingli_bazi_softill(),
-            mingli_ziwei_softill(),
-            mock_data_generator_softill(),
-            ocr_adapter_softill(),
-            parse_output_softill(),
-            pattern_research_softill(),
-            permission_compile_softill(),
-            pipe_runner_softill(),
-            poetry_eye_softill(),
-            prd_slicer_softill(),
-            project_baseline_softill(),
-            project_state_manager_softill(),
-            props_contract_extractor_softill(),
-            quote_eye_softill(),
-            receipt_collect_softill(),
-            register_softill(),
-            report_stitch_softill(),
-            research_manager_softill(),
-            runtime_report_writer_softill(),
-            safe_rename_softill(),
-            scaffold_softill(),
-            schema_validator_softill(),
-            scoring_engine_softill(),
-            screen_eye_softill(),
-            service_dependency_map_softill(),
-            shadcn_pattern_softill(),
-            shell_hand_softill(),
-            skylos_adapter_softill(),
-            social_content_converter_softill(),
-            softill_doctor_softill(),
-            softill_init_softill(),
-            stale_context_detector_softill(),
-            state_flow_scanner_softill(),
-            state_normalizer_softill(),
-            task_card_issue_softill(),
-            task_ledger_softill(),
-            template_fill_softill(),
-            test_selector_softill(),
-            threshold_registry_softill(),
-            token_counter_softill(),
-            ui_screenshot_runner_softill(),
-            video_script_writer_softill(),
-            visual_diff_checker_softill(),
-            visual_pipeline_softill(),
-            weather_eye_softill(),
-            web_fetcher_softill(),
-            wechat_eye_softill(),
-            worker_spawn_softill(),
-            worktree_create_softill(),
-            writing_combo_softill(),
-            xberg_adapter_softill(),
-            zlib_eye_softill(),
-        ]
-    }
+        api_contract_extractor_softill(),
+        auth_policy_map_softill(),
+        backend_route_map_softill(),
+        build_eye_softill(),
+        cache_manager_softill(),
+        code_review_diff_reader_softill(),
+        code_review_evidence_collector_softill(),
+        code_review_pattern_matcher_softill(),
+        code_review_report_generator_softill(),
+        code_search_softill(),
+        codebase_search_softill(),
+        component_inventory_softill(),
+        computer_hand_softill(),
+        contract_diff_softill(),
+        db_crud_softill(),
+        db_schema_map_softill(),
+        diff_review_softill(),
+        endpoint_smoke_tester_softill(),
+        env_requirements_checker_softill(),
+        error_contract_extractor_softill(),
+        file_patch_softill(),
+        fixture_sync_softill(),
+        format_code_softill(),
+        formula_engine_softill(),
+        frontend_api_usage_scanner_softill(),
+        frontend_route_map_softill(),
+        fullstack_map_softill(),
+        html_parse_softill(),
+        integration_check_softill(),
+        json_query_softill(),
+        keymouse_adapter_softill(),
+        migration_safety_checker_softill(),
+        mock_data_generator_softill(),
+        pipe_runner_softill(),
+        props_contract_extractor_softill(),
+        safe_rename_softill(),
+        schema_validator_softill(),
+        scoring_engine_softill(),
+        service_dependency_map_softill(),
+        shell_hand_softill(),
+        stale_context_detector_softill(),
+        state_flow_scanner_softill(),
+        task_ledger_softill(),
+        test_selector_softill(),
+        token_counter_softill(),
+        visual_pipeline_softill(),
+        collect_context_softill(),
+        combo_init_softill(),
+        e2e_summary_softill(),
+        handoff_writer_softill(),
+        prd_slicer_softill(),
+        project_baseline_softill(),
+        project_state_manager_softill(),
+        receipt_collect_softill(),
+        register_softill(),
+        report_stitch_softill(),
+        research_manager_softill(),
+        runtime_report_writer_softill(),
+        scaffold_softill(),
+        softill_doctor_softill(),
+        softill_init_softill(),
+        task_card_issue_softill(),
+        template_fill_softill(),
+        worker_spawn_softill(),
+        worktree_create_softill(),
+        balance_eye_softill(),
+        design_eye_softill(),
+        design_thief_softill(),
+        design_token_auditor_softill(),
+        image_eye_softill(),
+        screen_eye_softill(),
+        shadcn_pattern_softill(),
+        ui_screenshot_runner_softill(),
+        visual_diff_checker_softill(),
+        capcut_draft_softill(),
+        combo_runner_softill(),
+        comfy_eye_softill(),
+        contract_compare_softill(),
+        country_eye_softill(),
+        creative_writing_combo_softill(),
+        crypto_eye_softill(),
+        desktop_native_softill(),
+        dict_eye_softill(),
+        file_to_md_softill(),
+        fish_tts_softill(),
+        flue_eye_softill(),
+        forge_softill(),
+        gh_find_softill(),
+        github_eye_softill(),
+        hn_eye_softill(),
+        hook_install_softill(),
+        hook_replay_softill(),
+        hook_scaffold_softill(),
+        hook_validate_softill(),
+        host_config_patch_softill(),
+        host_live_test_softill(),
+        host_probe_softill(),
+        llm_call_softill(),
+        load_prompt_softill(),
+        maker_scoring_softill(),
+        md_process_softill(),
+        memory_eye_softill(),
+        meta_softill_softill(),
+        mingli_bazi_softill(),
+        mingli_ziwei_softill(),
+        ocr_adapter_softill(),
+        parse_output_softill(),
+        pattern_research_softill(),
+        permission_compile_softill(),
+        poetry_eye_softill(),
+        quote_eye_softill(),
+        skylos_adapter_softill(),
+        social_content_converter_softill(),
+        state_normalizer_softill(),
+        threshold_registry_softill(),
+        video_script_writer_softill(),
+        weather_eye_softill(),
+        web_fetcher_softill(),
+        wechat_eye_softill(),
+        writing_combo_softill(),
+        xberg_adapter_softill(),
+        zlib_eye_softill(),
+        file_eye_softill(),
+        git_tools_softill(),
+    ]
+}
 
 #[cfg(test)]
 mod tests {
@@ -2172,7 +2298,7 @@ mod tests {
     #[test]
     fn test_softill_count() {
         let softills = all_softills();
-        assert_eq!(softills.len(), 125, "all vendored JS softills count");
+        assert_eq!(softills.len(), 125, "all softills count");
     }
 
     #[test]

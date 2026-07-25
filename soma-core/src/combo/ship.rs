@@ -148,6 +148,7 @@ pub fn ship_combo() -> Combo {
             "required": ["taskId"]
         }),
         output_description: "Evidence receipt with collected audit trail, hash chain, and verification status.".into(),
+        tags: vec![],
         effect: "write-local".into(),
     });
 
@@ -168,6 +169,7 @@ pub fn ship_combo() -> Combo {
             "required": ["task_id"]
         }),
         output_description: "Verification result with pass/fail verdict, evidence chain, and detailed check results.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 

@@ -58,6 +58,7 @@ struct IndexEntry {
     description: String,
     source: CapabilitySource,
     keywords: Vec<String>,
+    tags: Vec<String>,
 }
 
 // ── 能力搜索器 ──────────────────────────────────────────────
@@ -106,6 +107,14 @@ impl CapabilitySearcher {
             // 名称包含查询
             else if entry.name.to_lowercase().contains(&q) {
                 score = 0.9;
+            }
+            // 标签匹配（标签是人工精选的关键词，优先级高于描述）
+            else if entry.tags.iter().any(|t| t.contains(&q)) {
+                score = 0.85;
+            }
+            // 任意标签匹配任一搜索词
+            else if terms.iter().any(|t| entry.tags.iter().any(|tag| tag.contains(t))) {
+                score = 0.8;
             }
             // 描述包含查询
             else if entry.description.to_lowercase().contains(&q) {
@@ -164,7 +173,6 @@ impl CapabilitySearcher {
 
     fn index_softill_library(index: &mut Vec<IndexEntry>) {
         // softill_library 中的所有 Softill 自动编入索引
-        // (通过 super::softill_library 模块加载)
         let softills = super::softill_library::all_softills();
         for s in &softills {
             let keywords = extract_keywords(&s.name);
@@ -173,6 +181,7 @@ impl CapabilitySearcher {
                 description: s.description.clone(),
                 source: CapabilitySource::SoftillLibrary,
                 keywords,
+                tags: s.tags.clone(),
             });
         }
     }
@@ -208,6 +217,7 @@ impl CapabilitySearcher {
                 description: desc.to_string(),
                 source: CapabilitySource::McpTool("foundry-soma-repo".into()),
                 keywords: keywords.into_iter().map(|s| s.to_string()).collect(),
+                tags: vec![],
             });
         }
     }
@@ -235,6 +245,7 @@ impl CapabilitySearcher {
                 description: desc.to_string(),
                 source: CapabilitySource::CliTool,
                 keywords: keywords.into_iter().map(|s| s.to_string()).collect(),
+                tags: vec![],
             });
         }
     }
@@ -254,6 +265,7 @@ impl CapabilitySearcher {
                 description: desc.to_string(),
                 source: CapabilitySource::HttpApi,
                 keywords: keywords.into_iter().map(|s| s.to_string()).collect(),
+                tags: vec![],
             });
         }
     }

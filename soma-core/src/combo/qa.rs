@@ -133,6 +133,7 @@ pub fn qa_combo() -> Combo {
             "required": ["command"]
         }),
         output_description: "tests-passed | test-failure | execution-error | timeout | permission-blocked | environment-missing. Includes exitCode, durationMs, failures list, stdout/stderr preview.".into(),
+        tags: vec![],
         effect: "write-local".into(),
     });
 
@@ -153,6 +154,7 @@ pub fn qa_combo() -> Combo {
             "required": ["task_id"]
         }),
         output_description: "Verification result with pass/fail verdict and evidence chain.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 

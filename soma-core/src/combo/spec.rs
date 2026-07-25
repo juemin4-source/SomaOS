@@ -188,6 +188,7 @@ pub fn spec_combo() -> Combo {
             "required": ["paths"]
         }),
         output_description: "Context object with extracted file summaries, key symbols, and project structure notes.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 
@@ -206,6 +207,7 @@ pub fn spec_combo() -> Combo {
             }
         }),
         output_description: "Project profile: projectType, packageManager, testCommands, buildCommands, entryFiles, riskNotes.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 

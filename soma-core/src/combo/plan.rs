@@ -148,6 +148,7 @@ pub fn plan_combo() -> Combo {
             "required": ["files"]
         }),
         output_description: "Impact analysis with affected areas, risk level assessment, and dependency chain.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 

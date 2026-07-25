@@ -20,6 +20,9 @@ pub struct Softill {
     pub output_description: String,
     /// 副作用（只读/写入本地/网络/全局）
     pub effect: String,
+    /// 搜索关键词/标签（用于能力搜索匹配）
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// 调用方式
@@ -62,6 +65,7 @@ impl Softill {
             input_schema: serde_json::json!({}),
             output_description: String::new(),
             effect: effect.to_string(),
+            tags: vec![],
         }
     }
 }

@@ -68,6 +68,7 @@ pub fn figma_file_read_softill() -> Softill {
             "required": ["file_key", "auth_token"]
         }),
         output_description: "Fig 文件信息：文件名、最后修改时间、缩略图URL、完整节点树（document）。".into(),
+        tags: vec![],
         effect: "network-read-only".into(),
     }
 }
@@ -102,6 +103,7 @@ pub fn figma_style_export_softill() -> Softill {
             "required": ["file_key", "auth_token"]
         }),
         output_description: "样式列表：每个样式包含 name, style_type（FILL/TEXT/EFFECT/GRID）, description。".into(),
+        tags: vec![],
         effect: "network-read-only".into(),
     }
 }

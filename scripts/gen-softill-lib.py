@@ -107,7 +107,17 @@ for cat_key in ['dev', 'prod', 'design', 'general', 'deprecated']:
         lines.append(f'            path: \"soma-core/softills/{entry}/{handler_file}\".into(),')
         lines.append(f'            interpreter: \"node\".into(),')
         lines.append(f'        }},')
+        # Generate tags from name and description
+        tag_words = set()
+        for w in entry.replace('-', ' ').replace('_', ' ').split():
+            if len(w) > 2: tag_words.add(w.lower())
+        for w in desc.lower().replace('[', '').replace(']', '').split():
+            w = w.strip('(),.、：）。，')
+            if len(w) > 2: tag_words.add(w)
+        tags_list = sorted(tag_words)[:8]
+
         lines.append('        input_schema: serde_json::json!({}),')
+        lines.append(f'        tags: vec![{", ".join(f"\"{t}\".into()" for t in tags_list)}],')
         if has_doc:
             out_desc = f'{clean_desc} 的执行结果。handler 包含输入/输出说明。'
         else:
@@ -124,7 +134,7 @@ header = f'/// 集中式 Softill 库 — {total} 个 vendored JS Script Softill\
 header += '///\n'
 header += '/// 自动生成于 SomaOS 旧资产批量接入。\n'
 header += '/// 每个 Softill 有完整 id、name、description、invocation 和 effect。\n'
-header += '/// input_schema 为最小占位，可根据实际 handler 补充细化。\n'
+header += '/// input_schema 为最小占位，tags 从名称和描述自动提取，可根据实际场景补充细化。\n'
 
 lines.insert(0, header)
 

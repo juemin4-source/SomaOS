@@ -138,6 +138,7 @@ pub fn project_takeover_combo() -> Combo {
             }
         }),
         output_description: "Project profile with projectType, packageManager, testCommands, buildCommands, entryFiles, riskNotes.".into(),
+        tags: vec![],
         effect: "read-only".into(),
     });
 
