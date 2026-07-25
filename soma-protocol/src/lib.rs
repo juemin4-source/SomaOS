@@ -1,6 +1,7 @@
 pub mod command;
 pub mod params;
 pub mod notification;
+pub mod events;
 
 #[cfg(test)]
 mod tests {

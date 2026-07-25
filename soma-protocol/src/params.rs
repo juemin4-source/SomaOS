@@ -43,6 +43,69 @@ pub struct SoftillExportResult {
     pub message: String,
 }
 
+// ── task/* 协议 ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCreateParams {
+    pub project_root: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCreateResult {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskListResult {
+    pub tasks: Vec<TaskSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskGetResult {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub project_root: String,
+    pub work_state: serde_json::Value,
+    pub artifacts: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSendMessageParams {
+    pub task_id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSendMessageResult {
+    pub task_id: String,
+    pub turn_id: String,
+    pub accepted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCancelParams {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCancelResult {
+    pub task_id: String,
+    pub cancelled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaseCreateParams {
     pub title: String,

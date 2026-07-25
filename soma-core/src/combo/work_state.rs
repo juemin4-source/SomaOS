@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::pipeline::ArtifactStore;
+use crate::combo::pipeline::ArtifactStore;
 
 /// 最小工作状态 — 跨会话恢复所需的信息
 ///
@@ -113,8 +113,8 @@ mod tests {
         state.set_next("code.patch → test.run");
 
         // 存储管线产物验证持久化
-        let artifact = super::pipeline::Artifact::new(
-            super::pipeline::ARTIFACT_DEBUG,
+        let artifact = crate::combo::pipeline::Artifact::new(
+            crate::combo::pipeline::ARTIFACT_DEBUG,
             "investigate",
             serde_json::json!({"root_cause": "wrong operator"}),
             "a - b instead of a + b",
@@ -133,7 +133,7 @@ mod tests {
         // 验证管线产物持久化
         assert!(!loaded.pipeline_artifacts.list_types().is_empty(),
             "pipeline_artifacts should have entries after storing");
-        let debug = loaded.pipeline_artifacts.get(super::pipeline::ARTIFACT_DEBUG);
+        let debug = loaded.pipeline_artifacts.get(crate::combo::pipeline::ARTIFACT_DEBUG);
         assert!(debug.is_some(), "debug artifact should survive roundtrip");
         assert_eq!(debug.unwrap().producer, "investigate");
 

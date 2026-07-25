@@ -32,6 +32,10 @@ use soma_store::run_store::{RunRecord, RunStore, RunStatus as StoreRunStatus};
 use soma_store::sqlite::SqliteCaseStore;
 use soma_store::store::CaseStore;
 use soma_protocol::command::{Request, Response, ProtocolError, Notification};
+use soma_protocol::events::EventSink;
+
+mod task_manager;
+use task_manager::TaskManager;
 use soma_protocol::params::{
     CaseCreateParams, CaseCreateResult,
     CaseGetParams, CaseGetResult,
@@ -50,6 +54,8 @@ struct AppState {
     registry: Arc<CapabilityRegistry>,
     /// 活跃 Run 的取消标志
     active_runs: Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>,
+    /// 任务管理器
+    task_manager: Mutex<TaskManager>,
 }
 
 // ── Output writer (shared between main loop and async run tasks) ──
@@ -646,6 +652,62 @@ fn handle_softill_export(params: serde_json::Value) -> Result<serde_json::Value,
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
+// ── Task Handlers ──
+
+fn handle_task_create(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let title = params.get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'title' field".to_string())?;
+    let project_root = params.get("project_root")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'project_root' field".to_string())?;
+
+    let result = state.task_manager.lock().unwrap().create(title, project_root);
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
+fn handle_task_list(_params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let tasks = state.task_manager.lock().unwrap().list();
+    let result = soma_protocol::params::TaskListResult { tasks };
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
+fn handle_task_get(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let task_id = params.get("task_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'task_id' field".to_string())?;
+
+    let task = state.task_manager.lock().unwrap()
+        .get(task_id)
+        .ok_or_else(|| format!("task {} not found", task_id))?;
+    serde_json::to_value(task).map_err(|e| format!("serialize: {}", e))
+}
+
+fn handle_task_send_message(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let task_id = params.get("task_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'task_id' field".to_string())?;
+    let _text = params.get("text")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'text' field".to_string())?;
+
+    let result = state.task_manager.lock().unwrap()
+        .start_turn(task_id)
+        .map_err(|e| format!("cannot start turn: {}", e))?;
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
+fn handle_task_cancel(params: serde_json::Value, state: &Arc<AppState>) -> Result<serde_json::Value, String> {
+    let task_id = params.get("task_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'task_id' field".to_string())?;
+
+    let result = state.task_manager.lock().unwrap()
+        .cancel_turn(task_id)
+        .map_err(|e| format!("cannot cancel: {}", e))?;
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
 // ── Main ──
 
 fn main() {
@@ -696,6 +758,7 @@ async fn async_main() {
         store: store.clone(),
         registry,
         active_runs: Mutex::new(std::collections::HashMap::new()),
+        task_manager: Mutex::new(TaskManager::new()),
     });
 
     let output = Arc::new(OutputWriter::new());
@@ -742,6 +805,11 @@ async fn async_main() {
             "gap/search" => handle_gap_search(request.params),
             "gap/propose" => handle_gap_propose(request.params),
             "softill/export" => handle_softill_export(request.params),
+            "task/create" => handle_task_create(request.params, &state),
+            "task/list" => handle_task_list(request.params, &state),
+            "task/get" => handle_task_get(request.params, &state),
+            "task/send_message" => handle_task_send_message(request.params, &state),
+            "task/cancel" => handle_task_cancel(request.params, &state),
             _ => Err(format!("unknown method: {}", request.method)),
         };
 
