@@ -28,3 +28,4 @@ pub mod figma;
 pub mod softill_library;
 pub mod capability_searcher;
 pub mod softill_export;
+pub mod common_plugins;

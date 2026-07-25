@@ -13,7 +13,7 @@
 0.5  Investigate → Fix → Review ✅ 真实 dogfood 验证
 0.7  项目接管与工作连续性          ✅ T1-T3 验证
 0.8  完整研发主链                 ✅ Gate A-E 全部完成 — 92 tests
-0.85 Softill 开放与生长           ⬜ Gate A ✅ B ✅ C 待推进
+0.85 Softill 开放与生长           ✅ Gate A ✅ B ✅ C ✅ — 121 tests
 0.9  产品化                      ⬜
 1.0  日常可用                    ⬜
 ```

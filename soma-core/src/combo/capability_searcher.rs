@@ -173,17 +173,24 @@ impl CapabilitySearcher {
 
     fn index_softill_library(index: &mut Vec<IndexEntry>) {
         // softill_library 中的所有 Softill 自动编入索引
-        let softills = super::softill_library::all_softills();
-        for s in &softills {
-            let keywords = extract_keywords(&s.name);
-            index.push(IndexEntry {
-                name: s.id.clone(),
-                description: s.description.clone(),
-                source: CapabilitySource::SoftillLibrary,
-                keywords,
-                tags: s.tags.clone(),
-            });
+        for s in &super::softill_library::all_softills() {
+            Self::index_one_softill(index, s, CapabilitySource::SoftillLibrary);
         }
+        // 常用插件也编入索引
+        for s in &super::common_plugins::all_common_plugins() {
+            Self::index_one_softill(index, s, CapabilitySource::SoftillLibrary);
+        }
+    }
+
+    fn index_one_softill(index: &mut Vec<IndexEntry>, s: &super::softill::Softill, source: CapabilitySource) {
+        let keywords = extract_keywords(&s.name);
+        index.push(IndexEntry {
+            name: s.id.clone(),
+            description: s.description.clone(),
+            source,
+            keywords,
+            tags: s.tags.clone(),
+        });
     }
 
     fn index_mcp_tools(index: &mut Vec<IndexEntry>) {

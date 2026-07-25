@@ -249,13 +249,31 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// 按 ID 从 softill_library 查找并导出
+/// 按 ID 查找并导出 Softill（搜索所有来源）
 pub fn export_by_id(softill_id: &str, output_dir: &Path) -> Result<ExportPackage, String> {
-    let all = super::softill_library::all_softills();
-    let softill = all.iter()
-        .find(|s| s.id == softill_id)
-        .ok_or_else(|| format!("Softill '{}' 未找到 (库中共 {} 个)", softill_id, all.len()))?;
-    export_softill(softill, output_dir)
+    // 搜索 softill_library
+    for s in &super::softill_library::all_softills() {
+        if s.id == softill_id {
+            return export_softill(s, output_dir);
+        }
+    }
+    // 搜索 common_plugins
+    for s in &super::common_plugins::all_common_plugins() {
+        if s.id == softill_id {
+            return export_softill(s, output_dir);
+        }
+    }
+    // 搜索 Figma
+    let figma_softills = [
+        super::figma::figma_file_read_softill(),
+        super::figma::figma_style_export_softill(),
+    ];
+    for s in &figma_softills {
+        if s.id == softill_id {
+            return export_softill(s, output_dir);
+        }
+    }
+    Err(format!("Softill '{}' 未找到", softill_id))
 }
 
 #[cfg(test)]
