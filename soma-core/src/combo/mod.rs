@@ -15,4 +15,5 @@ pub mod investigate;
 pub mod takeover;
 pub mod task;
 pub mod office_hours;
+pub mod spec;
 pub mod work_state;
