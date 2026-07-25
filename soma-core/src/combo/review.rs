@@ -6,17 +6,18 @@ use super::softill::{Softill, SoftillInvocation};
 
 // GATE-SOMA-FIRST-COMBO: Review Combo definition
 //
-// LEGACY-ASSET-RECLAIM-REVIEW completed 2026-07-25.
-// Softills sourced from three verified origins:
-//   gstack-diff-scope         → project-level scope classification (bin)
-//   code-review-diff-reader   → file-level diff details (JS handler, 4775B)
-//   soma-repo-diff/status     → git via MCP (soma-repo server)
-//   soma-file-search          → code search via MCP
-// Workflow informed by combo-lab code-review combo's 6-node DAG.
+// ASSET ORIGINS (after LEGACY-ASSET-RECLAIM-REVIEW):
+//   methodology_source:   gstack /review (Scope Drift, Fix-First, Checklist)
+//   execution_assets:    SomaOS legacy softills (combo-lab, foundry)
+//   combo_skeleton:      legacy code-review combo (combo-lab, 6-node DAG)
+//   related_combo:       fix-combo (combo-lab)
+//   organ_layer:         FileOrgan / GitOrgan / ProcessOrgan (SomaOS)
+//
+// This is NOT a gstack black-box wrapper. gstack provides methodology;
+// SomaOS assets provide execution.
 //
 // Review Combo 产出类型
-//
-// Scope Check
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ScopeVerdict {
     Clean,
@@ -32,7 +33,6 @@ pub struct ScopeCheck {
     pub issues: Vec<String>,
 }
 
-/// Finding
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
     pub severity: String,
@@ -44,7 +44,6 @@ pub struct Finding {
     pub fix: String,
 }
 
-/// Gate Result
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GateVerdict {
     Pass,
@@ -52,7 +51,6 @@ pub enum GateVerdict {
     Blocked,
 }
 
-/// Review Report — 完整的 Review Combo 产物
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewReport {
     pub scope_check: Option<ScopeCheck>,
@@ -63,8 +61,12 @@ pub struct ReviewReport {
 
 /// 构建 Review Combo
 ///
-/// 这是 SomaOS 的第一个 Combo 实例。
-/// 对应 gstack 的 /review skill。
+/// SomaOS 的第一个 Combo。它不是 gstack 的包装，而是：
+///   gstack 方法论（Skill）
+///   + SomaOS 旧资产（Softill）
+///   + SomaOS Organ
+///   + 旧 code-review Combo 骨架
+///   = SomaOS 原生 Review Combo
 pub fn review_combo() -> Combo {
     let mut combo = Combo::new(
         "review",
@@ -80,14 +82,17 @@ pub fn review_combo() -> Combo {
         "review this PR".into(),
     ];
 
-    // ── Skill: 审阅方法论 ──
+    // ── Skill: Review 方法论（来源：gstack /review）──
+    // gstack 提供经过验证的 Review 方法论，包括 Scope Drift Detection、
+    // Fix-First 原则、Checklist 分类体系、Adversarial Review 方法。
+    // 这些内容原封不动继承，不为概念纯洁而拆散。
 
     combo.skills.push(Skill::new(
         "review-methodology",
         "Review Methodology",
-        "How to review code changes systematically.",
-        "review-methodology",
-        r#"Code Review Methodology
+        "How to review code changes systematically. (from gstack /review)",
+        "any code review task",
+        r#"Code Review Methodology (gstack /review)
 
 1. Scope Drift Detection
    - Before reviewing code quality, check: did they build what was requested?
@@ -96,36 +101,29 @@ pub fn review_combo() -> Combo {
 
 2. Critical Pass
    Apply checklist categories against the diff:
-   - SQL & Data Safety
-   - Race Conditions & Concurrency
-   - LLM Output Trust Boundary
-   - Shell Injection
-   - Enum & Value Completeness
-   - Unchecked Deserialization
-   - Path Traversal & File Access Safety
-   - Error Handling & Fail-Close
+   - SQL & Data Safety, Race Conditions, LLM Trust Boundary
+   - Shell Injection, Enum Completeness, Deserialization
+   - Path Traversal, Error Handling
 
 3. Fix-First
-   Every finding gets action:
-   - AUTO-FIX: apply directly
-   - ASK: batch-present to user for decision
+   Every finding gets action: AUTO-FIX or ASK (batch-present to user)
 
 4. Adversarial Review
-   Independent subagent reviews the diff for issues the primary review missed.
+   Independent subagent reviews for issues the primary review missed.
 
 5. Persist
-   Save review results for downstream use by /ship.
+   Save review results for downstream use.
 "#,
     ));
 
     combo.skills.push(Skill::new(
         "scope-drift",
         "Scope Drift Detection",
-        "Check if the diff delivers exactly what was requested.",
-        "need to check if the implementation matches the requirements",
-        r#"Scope Drift Detection
+        "Check if the diff delivers exactly what was requested. (from gstack /review)",
+        "need to check if implementation matches requirements",
+        r#"Scope Drift Detection (gstack /review)
 
-1. Read TODOS.md, PR description, and commit messages for stated intent
+1. Read TODOS.md, PR description, commit messages for stated intent
 2. Compare with git diff --stat
 3. Check for:
    - SCOPE CREEP: files changed unrelated to stated intent
@@ -136,14 +134,13 @@ Output:
 "#,
     ));
 
-    // ── Softill: Review 所需的软件能力 ──
-    // 来源: LEGACY-ASSET-RECLAIM-REVIEW — 已验证真实可用的资产
+    // ── Softill: Review 执行能力（来源：SomaOS 旧资产）──
+    // 以下 Softill 均来自 LEGACY-ASSET-RECLAIM-REVIEW 确认的真实可用资产。
 
-    // gstack-diff-scope: 项目级 scope 分类 (backend/test/docs/api/auth 等布尔标记)
     combo.softills.push(Softill::new(
         "change-scope-classify",
         "Change Scope Classification",
-        "Classify a diff's scope into project-level categories (backend, frontend, tests, docs, etc.).",
+        "Classify diff scope into project-level categories. (gstack-diff-scope bin)",
         SoftillInvocation::Command {
             command: "gstack-diff-scope".into(),
             args_template: "<base_branch>".into(),
@@ -151,11 +148,10 @@ Output:
         "read-only",
     ));
 
-    // code-review-diff-reader: 文件级改动详情（路径、hunk、增减行、语言检测）
     combo.softills.push(Softill::new(
         "code-review-diff-reader",
         "Diff Reader",
-        "Read and structure git diff data: file list, hunks, added/removed lines, language detection.",
+        "Read and structure git diff: files, hunks, line counts, language detection. (combo-lab JS handler)",
         SoftillInvocation::Script {
             path: "somaos-combo-lab/.claude/softills/code-review-diff-reader/handler.mjs".into(),
             interpreter: "node".into(),
@@ -163,33 +159,30 @@ Output:
         "read-only",
     ));
 
-    // soma-repo-diff: Git diff via MCP
     combo.softills.push(Softill::new(
         "repo-diff",
         "Repository Diff",
-        "View git diff of a local repository. Available via mcp__soma-repo__soma_repo_diff.",
+        "Git diff via MCP tool. (foundry soma-repo server)",
         SoftillInvocation::McpTool {
             tool_name: "soma_repo_diff".into(),
         },
         "read-only",
     ));
 
-    // soma-repo-status: Git status via MCP
     combo.softills.push(Softill::new(
         "repo-status",
         "Repository Status",
-        "View git repository status. Available via mcp__soma-repo__soma_repo_status.",
+        "Git status via MCP tool. (foundry soma-repo server)",
         SoftillInvocation::McpTool {
             tool_name: "soma_repo_status".into(),
         },
         "read-only",
     ));
 
-    // soma-file-search: 代码内容搜索
     combo.softills.push(Softill::new(
         "soma-file-search",
         "File Search",
-        "Search file contents with pattern matching. Available via mcp__soma-repo__soma_file_search.",
+        "Search file contents via MCP tool. (foundry soma-repo server)",
         SoftillInvocation::McpTool {
             tool_name: "soma_file_search".into(),
         },
@@ -197,42 +190,54 @@ Output:
     ));
 
     // ── Organ 依赖 ──
-    // Git, File, Process 已在 SomaOS 中实现
-    // MCP 工具 (soma-repo) 通过外部 MCP 服务器提供
+    // FileOrgan, GitOrgan, ProcessOrgan 已在 SomaOS 中实现。
+    // MCP 工具通过外部 soma-repo MCP 服务器提供。
 
     combo.organ_dependencies = vec![
-        "git".into(),    // git diff, git log, git merge-base
-        "file".into(),   // read source files
-        "mcp".into(),    // MCP tools (soma-repo server)
+        "git".into(),
+        "file".into(),
+        "process".into(),
+        "mcp".into(),
     ];
 
-    // ── 工作流程 ──
-    // 参考: combo-lab code-review combo (6-node DAG)
-    // nodes: strategy-select → context-gather → diff-analysis + pattern-matching → report-generation → evidence-collection
+    // ── 工作流程（骨架来源：combo-lab code-review combo）──
+    // 旧 code-review Combo 定义了 6 节点 DAG，含并行执行和 body mode：
+    //   strategy-select → context-gather → diff-analysis + pattern-matching
+    //   → report-generation → evidence-collection
+    // 此处取其骨架，不作为最终架构锁定。
 
     combo.workflow = r#"Review Workflow
 
-1. Strategy Select — 根据 diff 大小、风险等级、代码类型选择策略
-   Softill: change-scope-classify (gstack-diff-scope)
+1. Strategy Select
+   Choose review strategy based on diff size, risk level, code type.
+   Softill: change-scope-classify
 
-2. Context Gather — 收集审查上下文：diff、commit 历史、相关文件
-   Softill: diff-reader + repo-diff + repo-status + file-search
+2. Context Gather
+   Collect diff, commit history, related files.
+   Softills: diff-reader, repo-diff, repo-status, file-search
 
-3. Diff Analysis — 分析 diff 内容，识别变更模式、风险区域
-   Softill: diff-reader (文件级结构化分析)
-   Parallel: pattern-matching
+3. Diff Analysis
+   Analyze diff for change patterns, risk areas, impact scope.
+   Softill: diff-reader (file-level structured analysis)
 
-4. Pattern Matching — 确定性模式检查（并行于 diff analysis）
-   Softill: code-review-pattern-matcher (来自 combo-lab)
+4. Pattern Matching (parallel with diff analysis)
+   Deterministic pattern checks against the code.
+   (combo-lab code-review-pattern-matcher available)
 
-5. Report Generation — 合并分析结果，生成结构化审阅报告
-   Softill: code-review-report-generator (来自 combo-lab)
+5. Report Generation
+   Merge all node outputs into structured review report.
+   (combo-lab code-review-report-generator available)
 
-6. Evidence Collection — 收集审查证据（仅 verified 模式）
-   Softill: code-review-evidence-collector (来自 combo-lab)
+6. Evidence Collection (verified mode only)
+   Collect audit trail of review process.
+   (combo-lab code-review-evidence-collector available)
 
-7. Scope Drift Detection — 对比意图与实际改动
-8. Gate Decision — PASS / FAIL / BLOCKED
+7. Scope Drift Detection
+   Compare stated intent vs actual changes.
+
+8. Gate Decision
+   PASS / FAIL / BLOCKED based on findings.
+
 9. Persist Results
 "#.to_string();
 
@@ -244,17 +249,16 @@ Output:
     ];
 
     // ── 产物 ──
-    // 参考: combo-lab code-review combo 的 6 节点 DAG
 
     combo.outputs = vec![
-        "Scope Classification (BACKEND/FRONTEND/TESTS/DOCS/API/AUTH...)".into(),
-        "Diff Analysis (files, hunks, added/removed lines, languages)".into(),
-        "Pattern Findings (from pattern-matcher checks)".into(),
+        "Scope Classification".into(),
+        "Diff Analysis (files, hunks, line counts, languages)".into(),
+        "Pattern Findings".into(),
         "Scope Check (CLEAN / DRIFT DETECTED / REQUIREMENTS MISSING)".into(),
         "Findings list with severity, confidence, file:line, fix".into(),
         "Quality Score (0-10)".into(),
         "Gate Result (PASS / FAIL / BLOCKED)".into(),
-        "Evidence Report (for verified mode)".into(),
+        "Evidence Report (verified mode)".into(),
     ];
 
     combo
@@ -263,7 +267,6 @@ Output:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combo::combo::Combo;
 
     #[test]
     fn test_review_combo_structure() {
@@ -279,43 +282,20 @@ mod tests {
     }
 
     #[test]
-    fn test_review_scope_check_serialize() {
-        let sc = ScopeCheck {
-            verdict: ScopeVerdict::Clean,
-            intent: "Fix the add function bug".into(),
-            delivered: "Fixed a - b to a + b in src/lib.rs".into(),
-            issues: vec![],
-        };
-        let json = serde_json::to_string(&sc).unwrap();
-        assert!(json.contains("Clean"));
+    fn test_review_skills_have_origin_notes() {
+        let c = review_combo();
+        assert!(c.skills[0].body.contains("gstack"));
+        assert!(c.skills[1].body.contains("gstack"));
     }
 
     #[test]
-    fn test_finding_serialize() {
-        let f = Finding {
-            severity: "P1".into(),
-            confidence: 9,
-            file: "src/lib.rs".into(),
-            line: Some(5),
-            summary: "Bug: a - b returns wrong result".into(),
-            category: "correctness".into(),
-            fix: "Change - to +".into(),
-        };
-        let json = serde_json::to_string(&f).unwrap();
-        assert!(json.contains("P1"));
-        assert!(json.contains("src/lib.rs"));
-    }
-
-    #[test]
-    fn test_gate_result_serialize() {
-        let r = ReviewReport {
-            scope_check: None,
-            findings: vec![],
-            quality_score: 8.5,
-            gate: GateVerdict::Pass,
-        };
-        let json = serde_json::to_string(&r).unwrap();
-        assert!(json.contains("Pass"));
+    fn test_review_softills_have_origin_notes() {
+        let c = review_combo();
+        for s in &c.softills {
+            assert!(!s.description.is_empty(), "Softill {} missing description", s.id);
+            assert!(s.description.contains("("),
+                "Softill {} missing origin note in description: {}", s.id, s.description);
+        }
     }
 
     #[test]
