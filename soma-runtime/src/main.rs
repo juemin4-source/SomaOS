@@ -625,6 +625,27 @@ fn handle_gap_propose(params: serde_json::Value) -> Result<serde_json::Value, St
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
+// ── Softill Export Handlers ──
+
+fn handle_softill_export(params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let softill_id = params.get("softill_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'softill_id' field".to_string())?;
+    let output_dir = params.get("output_dir")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
+
+    let out_path = std::path::Path::new(output_dir).join(&softill_id);
+    let pkg = soma_core::combo::softill_export::export_by_id(softill_id, &out_path)?;
+
+    let result = soma_protocol::params::SoftillExportResult {
+        output_dir: pkg.output_dir.to_string_lossy().to_string(),
+        file_count: pkg.files.len() as u32,
+        message: format!("导出成功: {} 个文件", pkg.files.len()),
+    };
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
 // ── Main ──
 
 fn main() {
@@ -720,6 +741,7 @@ async fn async_main() {
             "pipeline/describe" => handle_pipeline_describe(request.params),
             "gap/search" => handle_gap_search(request.params),
             "gap/propose" => handle_gap_propose(request.params),
+            "softill/export" => handle_softill_export(request.params),
             _ => Err(format!("unknown method: {}", request.method)),
         };
 

@@ -31,6 +31,19 @@ pub struct GapProposeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoftillExportParams {
+    pub softill_id: String,
+    pub output_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoftillExportResult {
+    pub output_dir: String,
+    pub file_count: u32,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaseCreateParams {
     pub title: String,
     pub initial_query: String,

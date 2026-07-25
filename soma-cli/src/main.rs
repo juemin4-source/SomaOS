@@ -25,6 +25,11 @@ enum Commands {
         #[command(subcommand)]
         command: PipelineCommand,
     },
+        /// Export a Softill as a standalone tool package
+    Softill {
+        #[command(subcommand)]
+        command: SoftillCommand,
+    },
     /// Capability gap analysis and Softill proposals
     Gap {
         #[command(subcommand)]
@@ -55,6 +60,18 @@ enum GapCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum SoftillCommand {
+    /// Export a softill as standalone tool (handler + manifest + test)
+    Export {
+        /// Softill ID (e.g. "code-search", "web-fetcher")
+        softill_id: String,
+        /// Output directory (defaults to current dir)
+        #[arg(short, long, default_value = ".")]
+        output: String,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -67,6 +84,9 @@ async fn main() {
         Commands::Gap { command } => match command {
             GapCommand::Search { query } => run_gap_search(query).await,
             GapCommand::Propose { query } => run_gap_propose(query).await,
+        },
+        Commands::Softill { command } => match command {
+            SoftillCommand::Export { softill_id, output } => run_softill_export(softill_id, output).await,
         },
     };
     if let Err(code) = result {
@@ -315,6 +335,48 @@ async fn run_gap_propose(query: &str) -> Result<(), i32> {
         Some(result) => {
             if let Some(proposal) = result["proposal"].as_str() {
                 println!("{}", proposal);
+                Ok(())
+            } else {
+                eprintln!("❌ Runtime 返回了意外的响应");
+                Err(1)
+            }
+        }
+        None => {
+            let msg = resp.error.map(|e| e.message).unwrap_or("未知错误".to_string());
+            eprintln!("❌ {}", msg);
+            Err(1)
+        }
+    }
+}
+
+/// 处理 softill export 命令：导出 Softill 为独立工具包
+async fn run_softill_export(softill_id: &str, output_dir: &str) -> Result<(), i32> {
+    let mut client = StdioClient::new();
+
+    let resp = client
+        .send_request(
+            "softill/export",
+            serde_json::json!({
+                "softill_id": softill_id,
+                "output_dir": output_dir,
+            }),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("❌ 无法连接 Runtime: {}", e);
+            1
+        })?;
+
+    match resp.result {
+        Some(result) => {
+            if let Some(msg) = result["message"].as_str() {
+                println!("✅ {}", msg);
+                if let Some(dir) = result["output_dir"].as_str() {
+                    println!("📁 输出目录: {}", dir);
+                }
+                if let Some(count) = result["file_count"].as_u64() {
+                    println!("📄 生成文件数: {}", count);
+                }
                 Ok(())
             } else {
                 eprintln!("❌ Runtime 返回了意外的响应");
