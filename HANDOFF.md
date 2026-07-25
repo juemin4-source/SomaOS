@@ -1,87 +1,151 @@
 # SomaOS Handoff — 2026-07-25
 
-> **会话终点:** 0.85 Gate A: 外部插件兼容 ✅ 旧资产批量接入 ✅ — 100 tests
-> **下一目标:** 0.85 Gate B: 能力缺口发现 → 先搜索复用 → 再生成 → 验证晋升
+> **会话终点:** 0.9-A 地基完成 — EventSink + TaskManager + task/* 协议
+> **下一目标:** EventSink 通知适配 → Tauri 桥接 → React 前端 → 0.9-A 纵向切片
 
 ---
 
 ## 项目状态
 
 ```
-0.2  执行内核                    ✅ 已发布
-0.3  Review Combo               ✅ GATE-SOMA-FIRST-COMBO
-0.5  Investigate → Fix → Review ✅ 真实 dogfood 验证
-0.7  项目接管与工作连续性          ✅ T1-T3 验证
-0.8  完整研发主链                 ✅ Gate A-E 全部完成 — 92 tests
-0.85 Softill 开放与生长           ✅ Gate A ✅ B ✅ C ✅ — 121 tests
-0.9  产品化                      ⬜
+0.2  执行内核                    ✅
+0.3  Review Combo               ✅
+0.5  Investigate → Fix → Review ✅
+0.7  项目接管与连续性             ✅
+0.8  完整研发主链（A-E）          ✅
+0.85 Softill 开放与生长（A-C）    ✅
+0.9  Desktop 地基                ⬜ 当前推进中
 1.0  日常可用                    ⬜
 ```
 
-## 0.8 真实进度（诚实分级）
+## 本次完成
 
-| Gate | 描述 | 状态 |
+### 0.9-A 地基
+
+| 组件 | 文件 | 状态 |
 |------|------|------|
-| A | 9 Combo 定义 + 登记 + 中文方法论 | ✅ 52 tests |
-| B | Combo 依赖与真实执行（Softill 绑定） | ✅ 9/9 有 Softill（MCP 工具） |
-| C | 跨 Combo 产物传递 | ✅ 管线类型定义 + ArtifactStore + WorkState 集成 |
-| D | 路由、回退与用户决策 | ✅ 路由规则系统 + 主链/短路路由 + 22 tests |
-| E | 真实功能全链 Dogfood | ✅ `soma pipeline describe` CLI + Runtime 集成，含 1 次真实回退 |
+| **RuntimeEventEnvelope** | `soma-protocol/src/events.rs` | ✅ 12 事件类型 |
+| **EventSink trait** | `soma-protocol/src/events.rs` | ✅ 传输无关 |
+| **MemoryEventSink** | `soma-protocol/src/events.rs` | ✅ 测试用 |
+| **TaskManager** | `soma-runtime/src/task_manager.rs` | ✅ 7 测试 |
+| **task/* 协议 handlers** | `soma-runtime/src/main.rs` | ✅ 5 端点 |
+| **task 协议参数** | `soma-protocol/src/params.rs` | ✅ |
+| **设计文档** | `.gstack/desktop-0.9-design.md` | ✅ 双层事件模型 |
+| **设计规范** | `.gstack/desktop-0.9-spec.md` | ✅ 13 屏幕 + 组件 |
 
-## 9 个 Combo
+### 设计稿（Figma "Spatial Workbench"）
+- 13 屏全部从 Figma API 拉取分析
+- 布局：Sidebar 272px / Workspace 1148px / Drawer 418px
+- 组件库：Buttons、Pills、Execution Cards、Composer、Tool Call 三阶段
+- 设计系统：Ambient Mint #3E8067、Ambient Blue #345F91
 
-| Combo | ID | Softills | 状态 |
-|-------|-----|---------|------|
-| 产品方向诊断 | office-hours | 3（MCP） | ✅ |
-| 需求规格 | spec | 6（MCP + vendored JS） | ✅ 旧资产接入 |
-| 实施计划 | plan | 5（MCP + vendored JS） | ✅ 旧资产接入 |
-| 方案审阅 | plan-review | 5（MCP + vendored JS） | ✅ 旧资产接入 |
-| 调查 | investigate | 6（MCP + gstack） | ✅ |
-| 代码审阅 | review | 8（MCP + gstack + JS） | ✅ |
-| 质量验证 | qa | 6（MCP + vendored JS） | ✅ 旧资产接入 |
-| 交付发布 | ship | 6（MCP + vendored JS） | ✅ 旧资产接入 |
-| 项目接管 | project-takeover | 5（MCP + vendored JS） | ✅ 旧资产接入 |
+### E2E 验证
+```
+task/create           → ✅ {"task_id":"task-1"}
+task/list             → ✅ [{"status":"idle"}]
+task/send_message     → ✅ {"accepted":true,"turn_id":"..."}
+```
+
+### 测试
+```
+soma-protocol: 14 tests ✅
+soma-core:     129 tests ✅
+soma-runtime:  7 tests ✅
+```
+
+## 缺口清单（需继续推进）
+
+### 优先级 P0 — 流式事件通路
+
+```
+[ ] EventSink → JSON-RPC notification 适配器
+    └─ EventSink impl 将 RuntimeEventEnvelope 写为 task/event notification
+    └─ 位置: soma-runtime/src/event_adapter.rs
+
+[ ] Tauri Event Bridge
+    └─ RuntimeEventEnvelope → SomaUiEvent 投影
+    └─ 位置: soma-desktop/src-tauri/src/event_bridge.rs
+
+[ ] Tauri 壳 + React 前端
+    └─ soma-desktop crate (workspace 注册)
+    └─ 目录结构: src/features/{tasks,conversation,execution,artifacts}
+    └─ runtime/commands.ts + events.ts + eventReducer.ts
+```
+
+### 优先级 P1 — 执行 + 持久化
+
+```
+[ ] TaskManager 连 TurnEngine
+    └─ send_message → 从 TurnEngine 流式执行
+    └─ EventSink 连入 TurnEngine 调用链
+    └─ Sequence 编号管理
+
+[ ] 长输出安全
+    └─ 4KB 单分块 / 256KB 累计上限 / 100ms 节流
+    └─ 截断标记 + 完整日志路径
+
+[ ] task/cancel → TurnEngine 实际中断
+    └─ 停止模型请求 + 子进程
+    └─ 保存 WorkState
+    └─ 发送 turn_interrupted
+```
+
+### 优先级 P2 — 恢复 + 审批
+
+```
+[ ] 任务恢复: task/get 返回快照 → 继续订阅实时事件
+[ ] approval_requested / respond_approval
+[ ] decision_requested / respond_decision
+```
+
+### 优先级 P3 — 更多屏幕
+
+```
+[ ] Changes 三栏 Diff
+[ ] Capabilities 浏览器
+[ ] Settings ×6
+[ ] First Run 引导
+[ ] Task Summary Drawer
+```
 
 ## 架构关键决策
 
-1. **V2 本体** — Skill = 方法论，Softill = 软件能力，Organ = 环境通道，Combo = S/S/O 完整连招
-2. **Hosted Native** — 不追求全 Rust 重写，控制权进入 Soma 即为原生
-3. **gstack 作为能力供体** — 方法论继承 gstack，Softill 优先复用旧资产
-4. **中文方法论** — 框架书面中文，推压口语化，不翻译
-5. ~~6 个方法论 Combo 当前只是 Skill~~ → ✅ Gate B 已绑定 Softill（MCP 工具）
+1. **双层事件模型** — RuntimeEvent ≠ SomaUiEvent。Tauri 后端投影。
+2. **非阻塞请求** — `task/send_message` 立即返回 `{accepted, turn_id}`，结果通过 notification 流推送。
+3. **单 active turn** — 多任务持久化，同一时间只执行一个。
+4. **持久化边界** — `assistant_delta` 和 `tool_updated` 不持久化。完成消息、Tool 终态、Artifact、WorkState 持久化。
+5. **长输出节流** — 4KB 分块 / 256KB 上限 / 100ms 窗口合并。
+6. **无 WebSocket** — 当前约束下 JSON-RPC stdio notification 足够。
+7. **目录结构** — `src/features/{tasks,conversation,execution,artifacts}`，`runtime/`，`types/`。
 
-## 旧资产使用情况
-
-**Foundry MCP（9 个 VERIFIED）：** 用了 4/9（diff、status、log、file-search）
-**combo-lab JS handler（29 个）：** 用了 4/29（diff-reader、pattern-matcher、report-generator、evidence-collector）
-**gstack bin：** diff-scope、learnings-search、review-log
-
-## 关键文档位置
+## 关键文件位置
 
 ```
+soma-protocol/src/
+├── events.rs           RuntimeEventEnvelope + EventSink trait + 12 事件类型
+├── params.rs           task/* 协议参数类型
+
+soma-runtime/src/
+├── main.rs             runtime 入口 + task/* handlers
+├── task_manager.rs     多任务生命周期管理
+
 .gstack/
-├── SOMAOS-1.0-NORTH-STAR-v2.md        北极星
-├── SOMAOS-ONTOLOGY-V2.md              本体定义
-├── SOMAOS-ROADMAP-TO-1.0.md           路线图
-├── GATE-SOMA-FIRST-COMBO.md           0.3 Gate
-├── GATE-SOMA-INVESTIGATE-COMBO.md      0.5 Gate
-├── GATE-SOMA-PROJECT-TAKEOVER.md       0.7 Gate
-├── GATE-SOMA-GSTACK-FULLCHAIN.md       0.8 Gate（含 5 级验收）
-├── legacy-asset-reclaim-review.md      旧资产盘点
-├── gstack-capability-map-phase1.md     gstack 能力地图
-├── gstack-phase2-three-skills.md       三个 Skill 深度解剖
-├── review-report-20260725.md           首次完整 Review 运行
+├── desktop-0.9-design.md  架构设计文档（含双层事件模型）
+├── desktop-0.9-spec.md    设计规范（13 屏幕 + 组件）
 ```
 
-## 下一步最短路径
+## 下次启动
 
-1. **0.9 产品化** — 管线运行时执行器 + 桌面端集成
-2. `soma pipeline run` — 半自动管线执行
+1. 读本 HANDOFF.md 恢复上下文
+2. 从 **EventSink → notification 适配** 开始（P0 第一条）
+   - 创建 `soma-runtime/src/event_adapter.rs`
+   - EventSink impl → `write_notification("task/event", ...)`
+3. 然后搭 `soma-desktop` Tauri 壳
+4. 然后是 React 前端骨架 + 事件 bridge
+5. 验收：纵向切片 — 创建任务 → 发送消息 → 流式事件 → 前端渲染 → 取消 → 持久化 → 恢复
 
 ## 技术债务
 
-- ✅ ~~6 个方法论 Combo 没有 Softill 绑定~~ → 已绑定 MCP 工具（2026-07-25）
-- ✅ ~~无跨 Combo 产物传递管线~~ → 已实现 Pipeline 定义 + ArtifactStore（2026-07-25）
-- ✅ ~~无路由/回退逻辑~~ → 已实现 Router + 主链/短路路由规则（2026-07-25）
-- ✅ ~~无真实全链 Dogfood~~ → FULL-CHAIN-001 完成（pipeline describe，2026-07-25）
-- stale test DB（已修 `.gitignore`，不会再出现）
+- 所有 `#[non_exhaustive]` 枚举（RouteCondition/RouteDecision/RuntimeEventKind）
+- 设计稿中的完整色值待从 Figma Foundations 页提取
+- Changes 三栏 Diff 的语法高亮 library 选择
