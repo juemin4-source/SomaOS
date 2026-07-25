@@ -151,9 +151,9 @@ Output:
     combo.softills.push(Softill::new(
         "code-review-diff-reader",
         "Diff Reader",
-        "Read and structure git diff: files, hunks, line counts, language detection. (combo-lab JS handler)",
+        "Read and structure git diff: files, hunks, line counts, language detection. (vendored JS handler)",
         SoftillInvocation::Script {
-            path: "somaos-combo-lab/.claude/softills/code-review-diff-reader/handler.mjs".into(),
+            path: "soma-core/softills/code-review-diff-reader.mjs".into(),
             interpreter: "node".into(),
         },
         "read-only",
@@ -187,6 +187,43 @@ Output:
             tool_name: "soma_file_search".into(),
         },
         "read-only",
+    ));
+
+    // ── Workflow-referenced Softills (from combo-lab) ──
+    // Registered here to resolve review finding F2: workflow references
+    // must correspond to registered Softills.
+
+    combo.softills.push(Softill::new(
+        "code-review-pattern-matcher",
+        "Pattern Matcher",
+        "Execute deterministic pattern matching checks against code. (vendored JS handler)",
+        SoftillInvocation::Script {
+            path: "soma-core/softills/code-review-pattern-matcher.mjs".into(),
+            interpreter: "node".into(),
+        },
+        "read-only",
+    ));
+
+    combo.softills.push(Softill::new(
+        "code-review-report-generator",
+        "Report Generator",
+        "Merge analysis results into structured review report. (vendored JS handler)",
+        SoftillInvocation::Script {
+            path: "soma-core/softills/code-review-report-generator.mjs".into(),
+            interpreter: "node".into(),
+        },
+        "write-local",
+    ));
+
+    combo.softills.push(Softill::new(
+        "code-review-evidence-collector",
+        "Evidence Collector",
+        "Collect review audit trail into verifiable evidence chain. (vendored JS handler)",
+        SoftillInvocation::Script {
+            path: "soma-core/softills/code-review-evidence-collector.mjs".into(),
+            interpreter: "node".into(),
+        },
+        "write-local",
     ));
 
     // ── Organ 依赖 ──
@@ -276,7 +313,7 @@ mod tests {
         assert!(!c.description.is_empty());
         assert!(!c.when_to_use.is_empty());
         assert_eq!(c.skills.len(), 2);
-        assert_eq!(c.softills.len(), 5);
+        assert_eq!(c.softills.len(), 8);
         assert!(!c.organ_dependencies.is_empty());
         assert!(!c.outputs.is_empty());
     }
