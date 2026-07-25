@@ -602,6 +602,29 @@ fn handle_pipeline_describe(params: serde_json::Value) -> Result<serde_json::Val
     serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
 }
 
+// ── Gap Handlers ──
+
+fn handle_gap_search(params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let query = params.get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'query' field".to_string())?;
+
+    let report = soma_core::combo::capability_searcher::render_gap_search(query);
+    let result = soma_protocol::params::GapSearchResult { report };
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
+fn handle_gap_propose(params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let query = params.get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'query' field".to_string())?;
+
+    let proposal = soma_core::combo::capability_searcher::propose_softill(query);
+    let proposal_text = soma_core::combo::capability_searcher::render_proposal(&proposal);
+    let result = soma_protocol::params::GapProposeResult { proposal: proposal_text };
+    serde_json::to_value(result).map_err(|e| format!("serialize: {}", e))
+}
+
 // ── Main ──
 
 fn main() {
@@ -695,6 +718,8 @@ async fn async_main() {
             "run/get" => handle_run_get(request.params, &state.store),
             "run/cancel" => handle_run_cancel(request.params, &state),
             "pipeline/describe" => handle_pipeline_describe(request.params),
+            "gap/search" => handle_gap_search(request.params),
+            "gap/propose" => handle_gap_propose(request.params),
             _ => Err(format!("unknown method: {}", request.method)),
         };
 

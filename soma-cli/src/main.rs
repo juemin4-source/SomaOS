@@ -25,6 +25,11 @@ enum Commands {
         #[command(subcommand)]
         command: PipelineCommand,
     },
+    /// Capability gap analysis and Softill proposals
+    Gap {
+        #[command(subcommand)]
+        command: GapCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -32,6 +37,20 @@ enum PipelineCommand {
     /// Describe the pipeline stages for a given task
     Describe {
         /// Task description (e.g. "fix login bug")
+        query: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GapCommand {
+    /// Search for existing capabilities matching a query
+    Search {
+        /// What capability are you looking for? (e.g. "plan delivery compare")
+        query: String,
+    },
+    /// Propose a new Softill candidate for a capability gap
+    Propose {
+        /// Describe the missing capability (e.g. "test impact analysis")
         query: String,
     },
 }
@@ -44,6 +63,10 @@ async fn main() {
         Commands::Resume { case_id } => run_resume(case_id).await,
         Commands::Pipeline { command } => match command {
             PipelineCommand::Describe { query } => run_pipeline_describe(query).await,
+        },
+        Commands::Gap { command } => match command {
+            GapCommand::Search { query } => run_gap_search(query).await,
+            GapCommand::Propose { query } => run_gap_propose(query).await,
         },
     };
     if let Err(code) = result {
@@ -238,6 +261,72 @@ async fn run_resume(case_id: &str) -> Result<(), i32> {
     }
 
     Ok(())
+}
+
+/// 处理 gap search 命令：通过 Runtime 搜索能力缺口
+async fn run_gap_search(query: &str) -> Result<(), i32> {
+    let mut client = StdioClient::new();
+
+    let resp = client
+        .send_request(
+            "gap/search",
+            serde_json::json!({ "query": query }),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("❌ 无法连接 Runtime: {}", e);
+            1
+        })?;
+
+    match resp.result {
+        Some(result) => {
+            if let Some(report) = result["report"].as_str() {
+                println!("{}", report);
+                Ok(())
+            } else {
+                eprintln!("❌ Runtime 返回了意外的响应");
+                Err(1)
+            }
+        }
+        None => {
+            let msg = resp.error.map(|e| e.message).unwrap_or("未知错误".to_string());
+            eprintln!("❌ {}", msg);
+            Err(1)
+        }
+    }
+}
+
+/// 处理 gap propose 命令：通过 Runtime 生成 Softill 候选提议
+async fn run_gap_propose(query: &str) -> Result<(), i32> {
+    let mut client = StdioClient::new();
+
+    let resp = client
+        .send_request(
+            "gap/propose",
+            serde_json::json!({ "query": query }),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("❌ 无法连接 Runtime: {}", e);
+            1
+        })?;
+
+    match resp.result {
+        Some(result) => {
+            if let Some(proposal) = result["proposal"].as_str() {
+                println!("{}", proposal);
+                Ok(())
+            } else {
+                eprintln!("❌ Runtime 返回了意外的响应");
+                Err(1)
+            }
+        }
+        None => {
+            let msg = resp.error.map(|e| e.message).unwrap_or("未知错误".to_string());
+            eprintln!("❌ {}", msg);
+            Err(1)
+        }
+    }
 }
 
 /// 处理 pipeline describe 命令：通过 Runtime 获取管线描述

@@ -318,6 +318,130 @@ impl CapabilitySearchResult {
     }
 }
 
+// ── Gap 渲染 ─────────────────────────────────────────────────
+
+/// 渲染搜索结果用于 CLI 显示
+pub fn render_gap_search(query: &str) -> String {
+    let searcher = CapabilitySearcher::build();
+    let result = searcher.search(query);
+    let mut out = result.summary();
+
+    if !result.has_exact_match {
+        out.push_str("\n  💡 未找到精确匹配的能力。\n");
+        out.push_str("     可以尝试: 调整搜索词，或使用 `soma gap propose <query>` 生成候选 Softill。\n");
+    }
+
+    out
+}
+
+// ── Softill 候选提议 ──────────────────────────────────────────
+
+/// Softill 候选提议 — 当搜索确认缺口后，建议生成的新 Softill
+#[derive(Debug, Clone)]
+pub struct SoftillProposal {
+    pub query: String,
+    pub suggested_id: String,
+    pub suggested_name: String,
+    pub purpose: String,
+    pub suggested_inputs: Vec<String>,
+    pub suggested_outputs: Vec<String>,
+    pub suggested_effect: String,
+    pub handler_approach: String,
+    pub similar_softills: Vec<String>,
+}
+
+/// 当搜索确认缺口后，生成 Softill 候选提议
+pub fn propose_softill(query: &str) -> SoftillProposal {
+    let q = query.to_lowercase();
+    let id = query.replace(' ', "-").to_lowercase();
+    let name = query.split_whitespace()
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(first) => first.to_uppercase().to_string() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let (purpose, effect, inputs, outputs, approach) = if q.contains("plan") && q.contains("delivery") {
+        ("比较实施计划与实际代码交付之间的偏差。从 Plan Combo 的输出和实际 diff 中提取结构化的差异清单。".to_string(),
+         "read-only",
+         vec!["plan_path: String — 实施计划文件路径".into(), "diff: String — 实际代码变更 diff".into()],
+         vec!["deviations: Vec<Deviation> — 偏差列表（计划 vs 实际）".into(), "verdict: 'aligned' | 'drifted' | 'missing'".into()],
+         "读取 Plan 产物 → 解析 git diff → 逐条对比 → 输出结构化偏差报告")
+    } else if q.contains("test") && q.contains("impact") {
+        ("分析代码变更影响的测试范围。识别哪些测试需要运行，哪些可以跳过。".to_string(),
+         "read-only",
+         vec!["changed_files: Vec<String> — 变更文件列表".into(), "test_root: String — 测试根目录".into()],
+         vec!["affected_tests: Vec<String> — 受影响测试列表".into(), "skip_tests: Vec<String> — 可跳过测试".into(), "coverage_gap: String — 未覆盖的变更区域".into()],
+         "解析变更文件 → 分析模块依赖 → 匹配对应测试 → 输出影响范围")
+    } else {
+        (format!("为 '{}' 提供自动化能力。具体输入输出取决于实际场景。", query),
+         "read-only",
+         vec!["input: String — 输入参数".into()],
+         vec!["result: String — 执行结果".into()],
+         "分析需求 → 设计实现 → 编码 → 测试")
+    };
+
+    // 搜索相似的 Softill
+    let searcher = CapabilitySearcher::build();
+    let similar = searcher.search(query);
+    let similar_names: Vec<String> = similar.matches.iter()
+        .take(3)
+        .map(|m| m.name.clone())
+        .collect();
+
+    SoftillProposal {
+        query: query.to_string(),
+        suggested_id: id,
+        suggested_name: name,
+        purpose: purpose.to_string(),
+        suggested_inputs: inputs,
+        suggested_outputs: outputs,
+        suggested_effect: effect.to_string(),
+        handler_approach: approach.to_string(),
+        similar_softills: similar_names,
+    }
+}
+
+/// 渲染候选提议用于 CLI 显示
+pub fn render_proposal(proposal: &SoftillProposal) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("📋 Softill 候选提议\n"));
+    out.push_str(&format!("   基于: {:?}\n\n", proposal.query));
+    out.push_str(&format!("  ID:   {}\n", proposal.suggested_id));
+    out.push_str(&format!("  名称: {}\n", proposal.suggested_name));
+    out.push_str(&format!("  用途: {}\n", proposal.purpose));
+    out.push_str(&format!("  副作用: {}\n", proposal.suggested_effect));
+    out.push_str("\n  建议输入:\n");
+    for i in &proposal.suggested_inputs {
+        out.push_str(&format!("    • {}\n", i));
+    }
+    out.push_str("\n  建议输出:\n");
+    for o in &proposal.suggested_outputs {
+        out.push_str(&format!("    • {}\n", o));
+    }
+    out.push_str(&format!("\n  实现思路:\n    {}\n", proposal.handler_approach));
+
+    if !proposal.similar_softills.is_empty() {
+        out.push_str("\n  相似已有能力:\n");
+        for s in &proposal.similar_softills {
+            out.push_str(&format!("    • {}（已有，可参考实现）\n", s));
+        }
+    }
+
+    out.push_str("\n  验证建议:\n");
+    out.push_str("    1. 在隔离沙箱中实现\n");
+    out.push_str("    2. 编写至少 3 个测试用例\n");
+    out.push_str("    3. 对照无此 Softill 的基线运行同一任务\n");
+    out.push_str("    4. 比较输出质量、工具调用次数、人工介入需求\n");
+    out.push_str("    5. 确认后被两个 Combo 复用 → 晋升为 available\n");
+
+    out
+}
+
 // ── 辅助函数 ─────────────────────────────────────────────────
 
 fn source_priority(source: &CapabilitySource) -> u8 {
@@ -423,5 +547,56 @@ mod tests {
         let summary = result.summary();
         assert!(!summary.is_empty());
         assert!(summary.contains("搜索"));
+    }
+
+    // ── 候选提议测试 ──
+
+    #[test]
+    fn test_propose_plan_delivery_compare() {
+        let proposal = propose_softill("plan delivery compare");
+        assert!(proposal.suggested_id.contains("plan"));
+        assert!(proposal.suggested_name.contains("Plan"));
+        assert!(!proposal.purpose.is_empty());
+        assert!(proposal.suggested_inputs.len() >= 2);
+        assert!(proposal.suggested_outputs.len() >= 1);
+    }
+
+    #[test]
+    fn test_propose_test_impact_analysis() {
+        let proposal = propose_softill("test impact analysis");
+        assert!(proposal.suggested_id.contains("test"));
+        assert!(!proposal.purpose.is_empty());
+        assert!(proposal.suggested_inputs.len() >= 1);
+    }
+
+    #[test]
+    fn test_propose_generic() {
+        let proposal = propose_softill("custom data validation");
+        assert!(!proposal.suggested_id.is_empty());
+        assert!(!proposal.suggested_name.is_empty());
+        // Should find some similar softills or return empty
+        assert!(proposal.similar_softills.len() <= 3);
+    }
+
+    #[test]
+    fn test_render_proposal() {
+        let proposal = propose_softill("plan delivery compare");
+        let rendered = render_proposal(&proposal);
+        assert!(rendered.contains("Softill 候选提议"));
+        assert!(rendered.contains("plan-delivery-compare"));
+        assert!(rendered.contains("验证建议"));
+    }
+
+    #[test]
+    fn test_render_gap_search() {
+        let rendered = render_gap_search("plan delivery compare");
+        assert!(rendered.contains("搜索"));
+        assert!(rendered.contains("gap propose"));
+    }
+
+    #[test]
+    fn test_proposal_effect_matches_purpose() {
+        let proposal = propose_softill("plan delivery compare");
+        assert_eq!(proposal.suggested_effect, "read-only");
     }
 }

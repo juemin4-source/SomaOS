@@ -11,6 +11,26 @@ pub struct PipelineDescribeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapSearchParams {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapSearchResult {
+    pub report: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapProposeParams {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapProposeResult {
+    pub proposal: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaseCreateParams {
     pub title: String,
     pub initial_query: String,
