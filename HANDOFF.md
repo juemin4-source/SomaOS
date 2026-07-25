@@ -144,6 +144,35 @@ soma-runtime/src/
 4. 然后是 React 前端骨架 + 事件 bridge
 5. 验收：纵向切片 — 创建任务 → 发送消息 → 流式事件 → 前端渲染 → 取消 → 持久化 → 恢复
 
+## 本地配置（不提交）
+
+以下敏感信息存于 `.somaos/env.json`（已 .gitignore）：
+
+```json
+{
+  "figma_token": "figd_...",        // Figma Personal Access Token
+  "figma_file_key": "2ISwgYFvBb7QDEDbp3VIk9",  // "Spatial Workbench" 设计稿
+  "proxy_host": "127.0.0.1",
+  "proxy_port": 7890                // VPN 端口
+}
+```
+
+使用方式（本会话已验证）：
+```bash
+TOKEN=$(python -c "import json; print(json.load(open('.somaos/env.json'))['figma_token'])")
+FILE_KEY=$(python -c "import json; print(json.load(open('.somaos/env.json'))['figma_file_key'])")
+curl -x http://127.0.0.1:7890 -H "X-Figma-Token: $TOKEN" "https://api.figma.com/v1/files/$FILE_KEY"
+```
+
+渲染设计稿截图：
+```bash
+# 获取 frame 渲染图
+curl -x http://127.0.0.1:7890 -H "X-Figma-Token: $TOKEN" \
+  "https://api.figma.com/v1/images/$FILE_KEY?ids=3:2&scale=2&format=png"
+# 下载图片
+curl -x http://127.0.0.1:7890 "<image_url>" -o screenshot.png
+```
+
 ## 技术债务
 
 - 所有 `#[non_exhaustive]` 枚举（RouteCondition/RouteDecision/RuntimeEventKind）
