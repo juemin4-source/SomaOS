@@ -45,6 +45,11 @@ enum Commands {
     ComboList,
     /// Show Combo details
     ComboInfo { id: String },
+    /// Output Combo as JSON (for AI consumption)
+    ComboShow {
+        /// Combo ID
+        id: String,
+    },
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -584,6 +589,15 @@ async fn main() {
                     println!("{:<12} {:<25} {}", combo.id, combo.name, &combo.description[..combo.description.len().min(50)]);
                 }
                 println!("\nTotal: {} Combo(s)", reg.list().len());
+                return;
+            }
+            Commands::ComboShow { id } => {
+                match reg.get(id) {
+                    Some(combo) => {
+                        println!("{}", serde_json::to_string_pretty(combo).unwrap());
+                    }
+                    None => eprintln!("Combo '{}' not found", id),
+                }
                 return;
             }
             Commands::ComboInfo { id } => {
