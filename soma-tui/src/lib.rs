@@ -120,9 +120,12 @@ pub fn run() -> io::Result<()> {
             }
         }
 
-        // 3. 如果是全新启动，添加启动摘要
+        // 3. 只设状态行，不往对话里塞摘要 cell
         if !is_restored {
-            SomaTuiApp::populate_startup_info(&mut model, &workspace_ctx);
+            model.status = match &workspace_ctx.branch {
+                Some(b) => format!("📁 {} · {} · 输入需求开始工作", workspace_ctx.name, b),
+                None => format!("📁 {} · 输入需求开始工作", workspace_ctx.name),
+            };
         }
 
         Ok::<_, io::Error>(SomaTuiApp {
