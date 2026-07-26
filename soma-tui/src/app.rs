@@ -23,7 +23,9 @@ use eye_declare::task::Task;
 use eye_declare::text::text;
 use eye_declare::text_area::{text_area, TextAreaState};
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
@@ -134,6 +136,8 @@ pub struct SomaTuiModel {
     pub runtime_disconnected: bool,
     /// 命令历史
     pub history: CommandHistory,
+    /// 工具调用开始时间（用于计算执行时长）
+    pub tool_start_times: HashMap<String, Instant>,
 }
 
 /// 命令历史环形缓冲区
@@ -224,6 +228,7 @@ impl SomaTuiModel {
             session_overlay: None,
             runtime_disconnected: false,
             history: CommandHistory::new(),
+            tool_start_times: HashMap::new(),
         }
     }
 
@@ -292,6 +297,7 @@ impl SomaTuiModel {
                 capability,
                 args_display,
             } => {
+                self.tool_start_times.insert(call_id.clone(), Instant::now());
                 self.cell_buffer.commit_active_assistant();
                 let label = capability_label(&capability);
                 self.active_tool_summary = Some(format!("正在{}", label));
@@ -324,14 +330,22 @@ impl SomaTuiModel {
             }
 
             UiEventKind::ToolCallCompleted {
-                call_id: _call_id,
+                call_id,
                 exit_code,
                 summary,
                 log_path,
             } => {
                 self.active_tool_summary = None;
+                let elapsed = self.tool_start_times.remove(&call_id);
                 let icon = if exit_code == 0 { "✓" } else { "✗" };
-                self.status = format!("工具 {}：{}", icon, summary);
+                let duration_str = elapsed
+                    .map(|t| format_duration(t.elapsed()))
+                    .unwrap_or_default();
+                if duration_str.is_empty() {
+                    self.status = format!("工具 {}：{}", icon, summary);
+                } else {
+                    self.status = format!("工具 {}：{} · {}", icon, summary, duration_str);
+                }
                 self.cell_buffer
                     .complete_active_tool(exit_code, summary, log_path);
             }
@@ -1224,6 +1238,17 @@ fn runtime_event_to_ui(envelope: RuntimeEventEnvelope) -> Option<UiEvent> {
     Some(UiEvent::new(&task_id, &turn_id, seq, kind))
 }
 
+/// 格式化持续时间（秒或毫秒）
+fn format_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs_f64();
+    if secs >= 1.0 {
+        format!("{:.1}s", secs)
+    } else {
+        format!("{}ms", d.as_millis())
+    }
+}
+
+/// 将能力名映射为用户友好的中文标签
 fn capability_label(capability: &str) -> &'static str {
     match capability {
         "file_read" => "读取文件",
@@ -1236,6 +1261,29 @@ fn capability_label(capability: &str) -> &'static str {
         "git_log" => "读取提交记录",
         _ => "执行工具",
     }
+}
+
+/// 判断工具类别（用于输出分类渲染）
+fn tool_category(capability: &str) -> &'static str {
+    match capability {
+        "file_edit" | "file_write" => "修改",
+        "process_run" => {
+            // 动态判断，但在这里无法看到实际命令
+            "验证"
+        }
+        "git_status" | "git_diff" | "git_log" => "Git",
+        _ => "工具",
+    }
+}
+
+/// 判断 process_run 是否可能是验证命令
+fn is_verification_command(args_display: &str) -> bool {
+    args_display.contains("cargo test")
+        || args_display.contains("cargo check")
+        || args_display.contains("cargo build")
+        || args_display.contains("cargo clippy")
+        || args_display.contains("npm test")
+        || args_display.contains("pytest")
 }
 
 fn capability_args_summary(capability: &str, args_display: &str) -> Option<String> {
@@ -1320,15 +1368,27 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
             truncated,
             ..
         } => {
-            let status = match exit_code {
+            let status_mark = match exit_code {
                 Some(0) => "✓",
                 Some(_) => "✗",
                 None => "●",
             };
+            let cat = tool_category(capability);
+            let label = capability_label(capability);
+            let is_verify = capability == "process_run"
+                && is_verification_command(args_display);
 
-            let mut parts = col()
-                .child(text(format!("{} {}", status, capability_label(capability))))
-                .gap(0);
+            let header = if is_verify {
+                format!("{} 验证", status_mark)
+            } else if cat == "修改" {
+                format!("{} 修改", status_mark)
+            } else {
+                format!("{} {}", status_mark, label)
+            };
+
+            let mut parts = col().child(text(header)).gap(0);
+
+            // 工具参数摘要（命令路径等）
             if let Some(args) = capability_args_summary(capability, args_display) {
                 parts = parts.child(text(format!("  {}", args)));
             }
@@ -1345,8 +1405,14 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
                 parts = parts.child(text("  …完整输出已截断"));
             }
 
+            // 结果摘要行
             if let Some(s) = summary {
-                parts = parts.child(text(format!("  {}", s)));
+                let done_icon = match exit_code {
+                    Some(0) => "✓",
+                    Some(_) => "✗",
+                    None => "",
+                };
+                parts = parts.child(text(format!("  {} {}", done_icon, s)));
             }
 
             if exit_code.is_none() {
