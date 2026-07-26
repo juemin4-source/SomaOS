@@ -16,6 +16,10 @@ use soma_ui_protocol::CellBuffer;
 use workspace::context::SessionSummary;
 use workspace::detect::detect_workspace;
 
+/// 最小终端尺寸
+const MIN_TERMINAL_WIDTH: u16 = 40;
+const MIN_TERMINAL_HEIGHT: u16 = 10;
+
 /// 从外部（soma-cli）启动 TUI 的入口
 pub fn run() -> io::Result<()> {
     tracing_subscriber::fmt()
@@ -25,19 +29,67 @@ pub fn run() -> io::Result<()> {
         )
         .init();
 
-    // 1. 检测工作区上下文（同步，TUI 启动前）
-    let cwd = std::env::current_dir().map_err(|e| {
-        io::Error::new(io::ErrorKind::Other, format!("获取当前目录失败: {}", e))
-    })?;
+    // 1. 终端尺寸检查
+    if let Some((w, h)) = terminal_size() {
+        if w < MIN_TERMINAL_WIDTH || h < MIN_TERMINAL_HEIGHT {
+            eprintln!(
+                "⚠ 终端窗口过小 ({}x{})，至少需要 {}x{}。请放大终端窗口。",
+                w, h, MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT
+            );
+            return Ok(());
+        }
+    }
+
+    // 2. 工作目录检查
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!(
+                "⚠ 无法访问当前工作目录: {}\n\
+                 请切换到有效的项目目录后重试。",
+                e
+            );
+            return Err(io::Error::new(io::ErrorKind::Other, format!("工作目录无效: {}", e)));
+        }
+    };
+    if !cwd.is_dir() {
+        eprintln!(
+            "⚠ 当前路径不是有效目录: {}\n\
+             请切换到项目目录后重试。",
+            cwd.display()
+        );
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("目录不存在: {}", cwd.display()),
+        ));
+    }
     let mut workspace_ctx = detect_workspace(&cwd);
 
+    // 3. 启动 tokio runtime
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("tokio runtime: {}", e)))?;
 
+    // 4. 连接 Runtime 子进程
     let app = rt.block_on(async {
-        let client = SomaClient::connect(".")
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let client = match SomaClient::connect(".").await {
+            Ok(c) => c,
+            Err(e) => {
+                // Runtime 启动失败 — 给出结构化提示
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "Runtime 启动失败: {}\n\n\
+                         可能的原因：\n\
+                         • soma-runtime 未编译或不在 PATH 中\n\
+                         • 缺少 API Key（需要 ANTHROPIC_API_KEY 或 DEEPSEEK_API_KEY）\n\
+                         • 项目目录没有写入权限（Runtime 需要创建 .somaos/ 目录）\n\
+                         \n\
+                         运行 `soma doctor` 查看诊断信息。",
+                        e
+                    ),
+                ));
+            }
+        };
         let task_id = client.task_id().unwrap_or_else(|| "?".to_string());
         tracing::debug!("Task: {}", task_id);
 
@@ -131,6 +183,14 @@ struct ExitSummary {
     changed_files: usize,
     #[allow(dead_code)]
     has_session: bool,
+}
+
+/// 获取终端尺寸（宽度和高度）
+fn terminal_size() -> Option<(u16, u16)> {
+    match crossterm::terminal::size() {
+        Ok((w, h)) => Some((w, h)),
+        Err(_) => None,
+    }
 }
 
 /// 在任务列表中查找最近的非当前任务

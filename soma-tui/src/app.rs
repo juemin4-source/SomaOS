@@ -812,6 +812,7 @@ impl App for SomaTuiApp {
                 if is_turn_end {
                     if let Err(e) = session::save_session(&self.task_id, ".", &m.cell_buffer) {
                         tracing::warn!(error = %e, "Failed to save session after turn end");
+                        m.status = format!("⚠ 会话保存失败: {}", e);
                     }
                 }
             }
@@ -951,7 +952,7 @@ impl App for SomaTuiApp {
             Msg::CommandFailed(error) => {
                 m.is_processing = false;
                 m.active_tool_summary = None;
-                m.status = format!("请求失败：{}", error);
+                m.status = format_user_error(&error);
                 m.cell_buffer.fail_all_active();
 
                 // 检测 Runtime 断开
@@ -1454,6 +1455,21 @@ fn runtime_event_to_ui(envelope: RuntimeEventEnvelope) -> Option<UiEvent> {
     Some(UiEvent::new(&task_id, &turn_id, seq, kind))
 }
 
+/// 将内部错误消息翻译为用户友好的提示
+fn format_user_error(error: &str) -> String {
+    if error.contains("channel closed") || error.contains("响应通道关闭") {
+        "Runtime 连接已断开。运行 `soma doctor` 检查状态。".to_string()
+    } else if error.contains("broken pipe") || error.contains("Broken pipe") {
+        "Runtime 进程已终止。运行 `soma doctor` 检查状态。".to_string()
+    } else if error.contains("serde") || error.contains("序列化") || error.contains("反序列化") {
+        format!("内部数据错误: {}", error)
+    } else if error.contains("Timeout") || error.contains("timeout") || error.contains("超时") {
+        format!("操作超时: {}", error)
+    } else {
+        format!("请求失败：{}", error)
+    }
+}
+
 /// 格式化持续时间（秒或毫秒）
 fn format_duration(d: std::time::Duration) -> String {
     let secs = d.as_secs_f64();
@@ -1647,6 +1663,13 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
 
             if exit_code.is_none() {
                 parts = parts.child(row().fill(text("执行中…")).fixed(3, spinner("…")));
+            }
+
+            // 失败时添加诊断提示
+            if let Some(code) = exit_code {
+                if *code != 0 && log_path.is_none() {
+                    parts = parts.child(text("  💡 运行 `soma doctor` 查看诊断信息"));
+                }
             }
             parts.any()
         }
