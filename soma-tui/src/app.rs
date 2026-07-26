@@ -437,32 +437,6 @@ pub struct SomaTuiApp {
 }
 
 impl SomaTuiApp {
-    /// 创建 App，从 SomaClient 获取 task_id
-    pub fn new(client: SomaClient) -> Self {
-        let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
-        let client = Arc::new(client);
-        Self {
-            model: SomaTuiModel::new(),
-            client,
-            task_id,
-            workspace_ctx: WorkspaceContext::new(std::path::PathBuf::from(".")),
-            _pending_task: None,
-        }
-    }
-
-    /// 使用已恢复的模型创建 App
-    pub fn new_with_model(client: SomaClient, model: SomaTuiModel) -> Self {
-        let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
-        let client = Arc::new(client);
-        Self {
-            model,
-            client,
-            task_id,
-            workspace_ctx: WorkspaceContext::new(std::path::PathBuf::from(".")),
-            _pending_task: None,
-        }
-    }
-
     /// 使用工作区上下文创建 App，自动添加启动摘要
     pub fn new_with_context(client: SomaClient, ctx: WorkspaceContext) -> Self {
         let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
@@ -552,6 +526,7 @@ impl SomaTuiApp {
     /// 处理斜杠命令
     fn handle_command(&mut self, cmd: Command, ctx: &mut Ctx<'_, Self>) {
         let m = &mut self.model;
+        let cmd_ref = &cmd; // 借用用于比较，不影响 match 消耗
         match cmd {
             Command::New => {
                 // `/new` — 创建新会话
@@ -570,20 +545,14 @@ impl SomaTuiApp {
                 m.status = "正在创建新会话…".into();
             }
 
-            Command::Resume => {
-                // `/resume` — 列出最近会话供选择
-                let client = self.client.clone();
-                self._pending_task = Some(ctx.perform(async move {
-                    match client.task_list().await {
-                        Ok(result) => Msg::SessionListLoaded(result.tasks),
-                        Err(error) => Msg::CommandFailed(format!("获取会话列表失败: {}", error)),
-                    }
-                }));
-                m.status = "正在获取会话列表…".into();
-            }
-
-            Command::Sessions => {
-                // `/sessions` — 列出所有会话
+            Command::Resume | Command::Sessions => {
+                let is_resume = matches!(cmd_ref, Command::Resume);
+                if is_resume {
+                    m.session_overlay = Some(SessionOverlayState {
+                        sessions: Vec::new(), // 占位，SessionListLoaded 时填充
+                        mode: SessionOverlayMode::Resume,
+                    });
+                }
                 let client = self.client.clone();
                 self._pending_task = Some(ctx.perform(async move {
                     match client.task_list().await {
@@ -722,6 +691,11 @@ impl App for SomaTuiApp {
                         }
                     }));
                 } else {
+                    // 空闲时 Ctrl+C 也保存退出摘要
+                    Self::save_exit_summary(
+                        &self.workspace_ctx,
+                        &m.cell_buffer,
+                    );
                     ctx.exit(());
                 }
             }
@@ -816,7 +790,7 @@ impl App for SomaTuiApp {
                 // 检测 Runtime 断开
                 if !self.client.is_connected() && !m.runtime_disconnected {
                     m.runtime_disconnected = true;
-                    m.status = "Runtime 意外退出。按 [r] 重启，[d] 诊断，[x] 退出".into();
+                    m.status = "Runtime 意外退出。按 [x] 退出（重新运行 soma 恢复）".into();
                 }
             }
 
@@ -835,8 +809,8 @@ impl App for SomaTuiApp {
                     });
                     m.status = "就绪".into();
                 } else {
-                    // 判断是 /resume 还是 /sessions：检查是否有 overlay
-                    let is_resume = m.session_overlay.as_ref().map_or(true, |o| o.mode == SessionOverlayMode::Resume);
+                    // 判断是 /resume 还是 /sessions：检查 overlay 模式
+                    let is_resume = m.session_overlay.as_ref().map_or(false, |o| o.mode == SessionOverlayMode::Resume);
                     if is_resume {
                         m.session_overlay = Some(SessionOverlayState {
                             sessions: sessions.clone(),
@@ -946,9 +920,7 @@ impl App for SomaTuiApp {
                     panel(text(
                         "Runtime 意外退出。\n\n\
                          已保留当前输入和已完成的对话。\n\n\
-                         [r] 重启 Runtime\n\
-                         [d] 运行诊断\n\
-                         [x] 退出"
+                         [x] 退出（重新运行 soma 恢复）"
                     ))
                     .title("⚠ Runtime 断开"),
                 )
@@ -996,9 +968,8 @@ impl App for SomaTuiApp {
         // Esc: 关闭覆盖层
         km = km.on(key(KeyCode::Esc), Msg::DismissOverlay);
 
-        // Runtime 断开恢复选项：r=重启, d=诊断, x=退出
+        // Runtime 断开：x=退出（重新运行重新连接）
         if self.model.runtime_disconnected {
-            km = km.on_override(key(KeyCode::Char('r')), Msg::Quit);
             km = km.on_override(key(KeyCode::Char('x')), Msg::Quit);
         }
 
@@ -1232,7 +1203,14 @@ fn runtime_event_to_ui(envelope: RuntimeEventEnvelope) -> Option<UiEvent> {
                 default,
             }
         }
-        _ => return None,
+        _ => {
+            let kind_name = format!("{:?}", envelope.kind);
+            tracing::warn!(event = %kind_name, "Unknown RuntimeEventKind — possible protocol mismatch");
+            UiEventKind::SystemMessage {
+                level: "warn".into(),
+                text: format!("未知 Runtime 事件: {}", kind_name),
+            }
+        }
     };
 
     Some(UiEvent::new(&task_id, &turn_id, seq, kind))

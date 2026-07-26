@@ -237,12 +237,7 @@ impl SomaClient {
 
     /// 发送消息到当前任务
     pub async fn send_message(&self, text: &str) -> Result<(), String> {
-        let tid = self
-            .task_id
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| "未创建 task".to_string())?;
+        let tid = self.require_task_id()?;
         self.request(
             "task/send_message",
             serde_json::json!({
@@ -256,12 +251,7 @@ impl SomaClient {
 
     /// 取消当前 turn
     pub async fn cancel(&self) -> Result<(), String> {
-        let tid = self
-            .task_id
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| "未创建 task".to_string())?;
+        let tid = self.require_task_id()?;
         self.request(
             "task/cancel",
             serde_json::json!({
@@ -298,9 +288,10 @@ impl SomaClient {
         self.create_task_inner(project_root).await
     }
 
-    /// 获取当前任务 ID
-    pub fn current_task_id(&self) -> Option<String> {
-        self.task_id.lock().unwrap().clone()
+    /// 获取当前任务 ID（Result 版本，供 request 类方法使用）
+    fn require_task_id(&self) -> Result<String, String> {
+        self.task_id()
+            .ok_or_else(|| "未创建 task".to_string())
     }
 
     /// 切换到另一个任务（用于会话恢复/切换）
@@ -382,12 +373,7 @@ impl SomaClient {
 
     /// 批准审批请求
     pub async fn approve(&self, approval_id: &str) -> Result<(), String> {
-        let tid = self
-            .task_id
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| "未创建 task".to_string())?;
+        let tid = self.require_task_id()?;
         self.request(
             "task/approve",
             serde_json::json!({
@@ -401,12 +387,7 @@ impl SomaClient {
 
     /// 拒绝审批请求
     pub async fn reject(&self, approval_id: &str) -> Result<(), String> {
-        let tid = self
-            .task_id
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| "未创建 task".to_string())?;
+        let tid = self.require_task_id()?;
         self.request(
             "task/reject",
             serde_json::json!({
