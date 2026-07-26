@@ -5,22 +5,23 @@
 
 use soma_ui_protocol::{Cell, CellBuffer, CellKind, CellState, UiEvent, UiEventKind};
 
+use crate::session;
+use crate::workspace::WorkspaceContext;
 use soma_client::SomaClient;
 use soma_protocol::events::{RuntimeEventEnvelope, RuntimeEventKind};
-use crate::session;
 
+use crossterm::event::KeyCode;
 use eye_declare::app::{App, Ctx};
 use eye_declare::element::{ElementExt, Fluent};
 use eye_declare::focus::{Focus, FocusHandle};
-use eye_declare::input::{InputEvent, Keymap, key, keymap};
+use eye_declare::input::{key, keymap, InputEvent, Keymap};
 use eye_declare::markdown::markdown;
 use eye_declare::panel::panel;
 use eye_declare::spinner::spinner;
 use eye_declare::stack::{col, row};
 use eye_declare::task::Task;
 use eye_declare::text::text;
-use eye_declare::text_area::{TextAreaState, text_area};
-use crossterm::event::KeyCode;
+use eye_declare::text_area::{text_area, TextAreaState};
 
 use std::sync::Arc;
 use tokio_stream::wrappers::BroadcastStream;
@@ -30,6 +31,53 @@ use tokio_stream::StreamExt;
 
 /// 输入区最大可见行数
 const INPUT_MAX_HEIGHT: u16 = 8;
+
+// ── 斜杠命令 ────────────────────────────────────────────────────
+
+/// 识别的斜杠命令
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Command {
+    New,
+    Resume,
+    Sessions,
+    Help,
+    Exit,
+}
+
+/// 解析斜杠命令
+fn parse_command(text: &str) -> Option<Command> {
+    let trimmed = text.trim();
+    if !trimmed.starts_with('/') {
+        return None;
+    }
+    match trimmed {
+        "/new" | "/n" => Some(Command::New),
+        "/resume" | "/r" => Some(Command::Resume),
+        "/sessions" | "/s" => Some(Command::Sessions),
+        "/help" | "/h" | "/?" => Some(Command::Help),
+        "/exit" | "/quit" | "/q" => Some(Command::Exit),
+        _ => None,
+    }
+}
+
+// ── 会话覆盖层 ──────────────────────────────────────────────────
+
+/// 会话列表覆盖层状态
+#[derive(Debug, Clone)]
+pub struct SessionOverlayState {
+    /// 会话列表摘要
+    pub sessions: Vec<soma_protocol::params::TaskSummary>,
+    /// 覆盖层模式
+    pub mode: SessionOverlayMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionOverlayMode {
+    /// `/resume` — 选择会话恢复
+    Resume,
+    /// `/sessions` — 仅浏览
+    List,
+}
 
 // ── 消息类型 ─────────────────────────────────────────────────────
 
@@ -50,8 +98,20 @@ pub enum Msg {
     RawInput(InputEvent),
     /// 用户批准了待审批的操作（Y key）
     ApprovePending,
+    /// 异步请求失败，需要回写到界面而不是只记 tracing
+    CommandFailed(String),
     /// 时钟滴答 / 占位
     Tick,
+    /// 在输入区插入换行（Shift+Enter）
+    InsertNewline,
+    /// 上一条历史
+    HistoryUp,
+    /// 下一条历史
+    HistoryDown,
+    /// 会话列表已加载
+    SessionListLoaded(Vec<soma_protocol::params::TaskSummary>),
+    /// 用户选择了会话列表中的第 N 项（0-indexed）
+    SessionSelected(usize),
 }
 
 // ── App 模型 ────────────────────────────────────────────────────
@@ -68,6 +128,82 @@ pub struct SomaTuiModel {
     pub pending_approval: Option<String>,
     pub pending_approval_id: Option<String>,
     pub status: String,
+    /// 会话覆盖层（/resume、/sessions）
+    pub session_overlay: Option<SessionOverlayState>,
+    /// Runtime 子进程是否已断开
+    pub runtime_disconnected: bool,
+    /// 命令历史
+    pub history: CommandHistory,
+}
+
+/// 命令历史环形缓冲区
+#[derive(Debug, Clone)]
+pub struct CommandHistory {
+    /// 历史条目（最近的在前）
+    entries: Vec<String>,
+    /// 当前浏览位置（0 = 最新，entries.len() = 空输入）
+    cursor: usize,
+    /// 浏览时暂存的当前输入
+    draft: String,
+}
+
+impl CommandHistory {
+    const MAX: usize = 100;
+
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::with_capacity(Self::MAX),
+            cursor: 0,
+            draft: String::new(),
+        }
+    }
+
+    /// 提交一条命令：添加到历史，重置浏览位置
+    pub fn push(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        // 避免连续重复
+        if self.entries.first().map(|s| s.as_str()) == Some(text) {
+            self.cursor = 0;
+            return;
+        }
+        self.entries.insert(0, text.to_string());
+        if self.entries.len() > Self::MAX {
+            self.entries.pop();
+        }
+        self.cursor = 0;
+        self.draft.clear();
+    }
+
+    /// 上一条：保存当前输入 → 取历史
+    pub fn up(&mut self, current_input: &str) -> Option<String> {
+        if self.entries.is_empty() {
+            return None;
+        }
+        if self.cursor == 0 {
+            // 第一次按 ↑，保存当前输入为 draft
+            self.draft = current_input.to_string();
+        }
+        if self.cursor < self.entries.len() {
+            self.cursor += 1;
+        }
+        Some(self.entries[self.cursor - 1].clone())
+    }
+
+    /// 下一条：回到较新的历史
+    pub fn down(&mut self) -> Option<String> {
+        if self.cursor == 0 {
+            return None; // 已在最新位置
+        }
+        self.cursor -= 1;
+        if self.cursor == 0 {
+            // 回到暂存输入
+            Some(std::mem::take(&mut self.draft))
+        } else {
+            Some(self.entries[self.cursor - 1].clone())
+        }
+    }
 }
 
 impl SomaTuiModel {
@@ -84,18 +220,23 @@ impl SomaTuiModel {
             active_tool_summary: None,
             pending_approval: None,
             pending_approval_id: None,
-            status: "SomaOS TUI 0.1 — ready".into(),
+            status: "就绪".into(),
+            session_overlay: None,
+            runtime_disconnected: false,
+            history: CommandHistory::new(),
         }
     }
 
     /// 处理一个 UiEvent
     pub fn apply_ui_event(&mut self, event: UiEvent) {
         let seq = event.sequence;
+        let task_id = event.task_id.clone();
+        let turn_id = event.turn_id.clone();
 
         match event.kind {
             UiEventKind::TurnStarted => {
                 self.is_processing = true;
-                self.status = format!("Turn {} started", event.turn_id);
+                self.status = "正在处理…".into();
                 // 创建新的活跃 assistant cell
                 self.cell_buffer.push_cell(Cell {
                     kind: CellKind::AssistantMessage {
@@ -109,12 +250,32 @@ impl SomaTuiModel {
                 });
             }
 
-            UiEventKind::StreamChunk { text, newline_count: _, is_final } => {
-                // 追加到活跃 assistant cell
+            UiEventKind::StreamChunk {
+                text,
+                newline_count: _,
+                is_final,
+            } => {
+                // 一个工具调用完成后，下一段 AssistantDelta 必须开启新的回复 cell。
+                if self.cell_buffer.active_assistant_mut().is_none() {
+                    self.cell_buffer.push_cell(Cell {
+                        kind: CellKind::AssistantMessage {
+                            committed_text: String::new(),
+                            pending_text: String::new(),
+                        },
+                        state: CellState::Active,
+                        task_id: task_id.clone(),
+                        turn_id: turn_id.clone(),
+                        created_at: seq,
+                    });
+                }
+
                 if let Some(cell) = self.cell_buffer.active_assistant_mut() {
-                    if let CellKind::AssistantMessage { committed_text, pending_text } = &mut cell.kind {
+                    if let CellKind::AssistantMessage {
+                        committed_text,
+                        pending_text,
+                    } = &mut cell.kind
+                    {
                         pending_text.push_str(&text);
-                        // 将已完成的行（含 \n）移到 committed
                         if let Some(newline_pos) = pending_text.rfind('\n') {
                             committed_text.push_str(&pending_text[..=newline_pos]);
                             pending_text.drain(..=newline_pos);
@@ -122,13 +283,19 @@ impl SomaTuiModel {
                     }
                 }
                 if is_final {
-                    self.status = "Stream complete".into();
+                    self.status = "流式输出完成".into();
                 }
             }
 
-            UiEventKind::ToolCallStarted { call_id, capability, args_display } => {
-                self.active_tool_summary = Some(format!("Running {}", capability));
-                self.status = format!("Tool: {}", capability);
+            UiEventKind::ToolCallStarted {
+                call_id,
+                capability,
+                args_display,
+            } => {
+                self.cell_buffer.commit_active_assistant();
+                let label = capability_label(&capability);
+                self.active_tool_summary = Some(format!("正在{}", label));
+                self.status = format!("工具：{}", label);
                 self.cell_buffer.push_cell(Cell {
                     kind: CellKind::ToolCall {
                         call_id,
@@ -147,49 +314,61 @@ impl SomaTuiModel {
                 });
             }
 
-            UiEventKind::ToolCallOutput { call_id, output, truncated } => {
-                self.cell_buffer.append_tool_output(&call_id, &output);
-                if truncated {
-                    // 标记截断（实际截断已在 runtime 侧完成）
-                }
+            UiEventKind::ToolCallOutput {
+                call_id,
+                output,
+                truncated,
+            } => {
+                self.cell_buffer
+                    .append_tool_output(&call_id, &output, truncated);
             }
 
-            UiEventKind::ToolCallCompleted { call_id: _call_id, exit_code, summary, log_path } => {
+            UiEventKind::ToolCallCompleted {
+                call_id: _call_id,
+                exit_code,
+                summary,
+                log_path,
+            } => {
                 self.active_tool_summary = None;
                 let icon = if exit_code == 0 { "✓" } else { "✗" };
-                self.status = format!("Tool {}: {}", icon, summary);
-                self.cell_buffer.complete_active_tool(exit_code, summary, log_path);
+                self.status = format!("工具 {}：{}", icon, summary);
+                self.cell_buffer
+                    .complete_active_tool(exit_code, summary, log_path);
             }
 
             UiEventKind::TurnCompleted => {
                 self.is_processing = false;
                 self.active_tool_summary = None;
-                self.status = "Ready".into();
+                self.status = "就绪".into();
                 self.cell_buffer.commit_all_active();
             }
 
             UiEventKind::TurnInterrupted => {
                 self.is_processing = false;
                 self.active_tool_summary = None;
-                self.status = "Interrupted".into();
+                self.status = "已中断，当前状态已保留".into();
                 self.cell_buffer.interrupt_all_active();
             }
 
             UiEventKind::TurnFailed { error } => {
                 self.is_processing = false;
                 self.active_tool_summary = None;
-                self.status = format!("Failed: {}", error);
+                self.status = format!("失败：{}", error);
                 self.cell_buffer.fail_all_active();
             }
 
-            UiEventKind::ApprovalRequired { approval_id, prompt, .. } => {
+            UiEventKind::ApprovalRequired {
+                approval_id,
+                prompt,
+                ..
+            } => {
                 self.pending_approval = Some(prompt);
                 self.pending_approval_id = Some(approval_id);
-                self.status = "Approval required — press Y/y to approve, Esc to reject".into();
+                self.status = "需要批准：按 Y 批准，按 Esc 拒绝".into();
             }
 
             UiEventKind::UserInputRequired { prompt, .. } => {
-                self.status = format!("Input required: {}", prompt);
+                self.status = format!("需要输入：{}", prompt);
             }
 
             UiEventKind::SystemMessage { level, text: msg } => {
@@ -200,14 +379,23 @@ impl SomaTuiModel {
                 self.status = format!("[{}] {}", combo, stage);
             }
 
-            UiEventKind::ArtifactCreated { path: art_path, summary } => {
-                self.status = format!("Artifact: {} ({})", summary, art_path);
+            UiEventKind::ArtifactCreated {
+                path: art_path,
+                summary,
+            } => {
+                self.status = format!("产物：{}（{}）", summary, art_path);
             }
 
-            UiEventKind::DiffAvailable { diff_text, file_path } => {
-                self.status = format!("Diff: {}", file_path.as_deref().unwrap_or("(inline)"));
+            UiEventKind::DiffAvailable {
+                diff_text,
+                file_path,
+            } => {
+                self.status = format!("Diff：{}", file_path.as_deref().unwrap_or("内联内容"));
                 self.cell_buffer.push_cell(Cell {
-                    kind: CellKind::Diff { diff_text, file_path },
+                    kind: CellKind::Diff {
+                        diff_text,
+                        file_path,
+                    },
                     state: CellState::Committed,
                     task_id: event.task_id,
                     turn_id: event.turn_id,
@@ -228,35 +416,219 @@ pub struct SomaTuiApp {
     pub client: Arc<SomaClient>,
     /// 当前任务 ID
     pub task_id: String,
+    /// 工作区启动上下文
+    pub workspace_ctx: WorkspaceContext,
     /// 正在执行中的异步任务（hold 住防止被 cancel）
-    _pending_task: Option<Task>,
+    pub(crate) _pending_task: Option<Task>,
 }
 
 impl SomaTuiApp {
     /// 创建 App，从 SomaClient 获取 task_id
     pub fn new(client: SomaClient) -> Self {
-        let task_id = client.task_id().unwrap_or("unknown").to_string();
+        let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
         let client = Arc::new(client);
         Self {
             model: SomaTuiModel::new(),
             client,
             task_id,
+            workspace_ctx: WorkspaceContext::new(std::path::PathBuf::from(".")),
             _pending_task: None,
         }
     }
 
     /// 使用已恢复的模型创建 App
-    #[allow(dead_code)]
     pub fn new_with_model(client: SomaClient, model: SomaTuiModel) -> Self {
-        let task_id = client.task_id().unwrap_or("unknown").to_string();
+        let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
         let client = Arc::new(client);
         Self {
             model,
             client,
             task_id,
+            workspace_ctx: WorkspaceContext::new(std::path::PathBuf::from(".")),
             _pending_task: None,
         }
     }
+
+    /// 使用工作区上下文创建 App，自动添加启动摘要
+    pub fn new_with_context(client: SomaClient, ctx: WorkspaceContext) -> Self {
+        let task_id = client.task_id().unwrap_or_else(|| "unknown".to_string());
+        let client = Arc::new(client);
+        let mut model = SomaTuiModel::new();
+        Self::populate_startup_info(&mut model, &ctx);
+        Self {
+            model,
+            client,
+            task_id,
+            workspace_ctx: ctx,
+            _pending_task: None,
+        }
+    }
+
+    /// 保存退出摘要供 TUI 退出后打印
+    fn save_exit_summary(ctx: &WorkspaceContext, cell_buffer: &CellBuffer) {
+        let changed_count = ctx.changed_files.len();
+        let session_path = std::path::PathBuf::from(".somaos").join("exit-summary.json");
+        if let Some(parent) = session_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let summary = serde_json::json!({
+            "project": ctx.name,
+            "branch": ctx.branch,
+            "changed_files": changed_count,
+            "has_session": !cell_buffer.cells().is_empty(),
+        });
+        if let Ok(json) = serde_json::to_string(&summary) {
+            let _ = std::fs::write(&session_path, json);
+        }
+    }
+
+    /// 向模型添加启动摘要 cell（公开供 lib.rs 调用）
+    pub fn populate_startup_info(model: &mut SomaTuiModel, ctx: &WorkspaceContext) {
+        let mut lines = Vec::new();
+        lines.push(format!("📁 项目: {}", ctx.name));
+
+        if let Some(ref branch) = ctx.branch {
+            lines.push(format!("🌿 分支: {}", branch));
+        }
+
+        if !ctx.project_kinds.is_empty() {
+            let kinds: Vec<String> = ctx.project_kinds.iter().map(|k| k.to_string()).collect();
+            lines.push(format!("⚙️  类型: {}", kinds.join(", ")));
+        }
+
+        if !ctx.build_tools.is_empty() {
+            let tools: Vec<String> = ctx.build_tools.iter().map(|t| t.to_string()).collect();
+            lines.push(format!("🔧 工具: {}", tools.join(", ")));
+        }
+
+        if !ctx.changed_files.is_empty() {
+            let (modified, added, deleted, other) = count_changes(&ctx.changed_files);
+            let mut stats = Vec::new();
+            if modified > 0 { stats.push(format!("{} 修改", modified)); }
+            if added > 0 { stats.push(format!("{} 新增", added)); }
+            if deleted > 0 { stats.push(format!("{} 删除", deleted)); }
+            if other > 0 { stats.push(format!("{} 其他", other)); }
+            lines.push(format!("📊 变更: {}", stats.join(", ")));
+        }
+
+        lines.push(format!("🔒 权限: {}", ctx.permission_mode));
+
+        if let Some(ref session) = ctx.recent_session {
+            lines.push(format!("📋 上次会话: {}", session.title));
+        }
+
+        let banner = lines.join("\n");
+
+        model.cell_buffer.push_cell(Cell {
+            kind: CellKind::SystemMessage {
+                level: "info".into(),
+                text: banner,
+            },
+            state: CellState::Committed,
+            task_id: String::new(),
+            turn_id: String::new(),
+            created_at: 0,
+        });
+
+        model.status = format!("📁 {} · {}",
+            ctx.name,
+            ctx.branch.as_deref().unwrap_or("就绪"));
+    }
+
+    /// 处理斜杠命令
+    fn handle_command(&mut self, cmd: Command, ctx: &mut Ctx<'_, Self>) {
+        let m = &mut self.model;
+        match cmd {
+            Command::New => {
+                // `/new` — 创建新会话
+                m.session_overlay = None;
+                let client = self.client.clone();
+                let project_root = self.workspace_ctx.root.to_string_lossy().to_string();
+                self._pending_task = Some(ctx.perform(async move {
+                    match client.create_task(&project_root).await {
+                        Ok(new_task_id) => {
+                            client.switch_to_task(new_task_id);
+                            Msg::SessionSelected(0) // 复用：表示会话已切换
+                        }
+                        Err(error) => Msg::CommandFailed(format!("创建会话失败: {}", error)),
+                    }
+                }));
+                m.status = "正在创建新会话…".into();
+            }
+
+            Command::Resume => {
+                // `/resume` — 列出最近会话供选择
+                let client = self.client.clone();
+                self._pending_task = Some(ctx.perform(async move {
+                    match client.task_list().await {
+                        Ok(result) => Msg::SessionListLoaded(result.tasks),
+                        Err(error) => Msg::CommandFailed(format!("获取会话列表失败: {}", error)),
+                    }
+                }));
+                m.status = "正在获取会话列表…".into();
+            }
+
+            Command::Sessions => {
+                // `/sessions` — 列出所有会话
+                let client = self.client.clone();
+                self._pending_task = Some(ctx.perform(async move {
+                    match client.task_list().await {
+                        Ok(result) => Msg::SessionListLoaded(result.tasks),
+                        Err(error) => Msg::CommandFailed(format!("获取会话列表失败: {}", error)),
+                    }
+                }));
+                m.status = "正在获取会话列表…".into();
+            }
+
+            Command::Help => {
+                let help_text = vec![
+                    "可用命令:".into(),
+                    "  /new, /n        创建新会话",
+                    "  /resume, /r     恢复最近会话",
+                    "  /sessions, /s   列出所有会话",
+                    "  /help, /h       显示此帮助",
+                    "  /exit, /quit, /q  退出程序",
+                    "",
+                    "直接输入需求即可开始工作。",
+                ]
+                .join("\n");
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: help_text,
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
+            }
+
+            Command::Exit => {
+                // /exit — 触发退出流程
+                ctx.exit(());
+            }
+        }
+    }
+}
+
+/// 统计变更文件的各种类型数量
+fn count_changes(files: &[crate::workspace::ChangedFile]) -> (usize, usize, usize, usize) {
+    let mut modified = 0;
+    let mut added = 0;
+    let mut deleted = 0;
+    let mut other = 0;
+    for f in files {
+        match f.status.as_str() {
+            "M" => modified += 1,
+            "A" => added += 1,
+            "D" => deleted += 1,
+            "??" => added += 1, // 未跟踪视为新增
+            _ => other += 1,
+        }
+    }
+    (modified, added, deleted, other)
 }
 
 impl App for SomaTuiApp {
@@ -280,10 +652,12 @@ impl App for SomaTuiApp {
         match msg {
             Msg::UiEventReceived(event) => {
                 // 判断是否是 TurnCompleted，以便在 apply 后保存
-                let is_turn_end = matches!(&event.kind,
-                    UiEventKind::TurnCompleted |
-                    UiEventKind::TurnFailed { .. } |
-                    UiEventKind::TurnInterrupted);
+                let is_turn_end = matches!(
+                    &event.kind,
+                    UiEventKind::TurnCompleted
+                        | UiEventKind::TurnFailed { .. }
+                        | UiEventKind::TurnInterrupted
+                );
                 m.apply_ui_event(event);
                 if is_turn_end {
                     if let Err(e) = session::save_session(&self.task_id, ".", &m.cell_buffer) {
@@ -295,37 +669,43 @@ impl App for SomaTuiApp {
             Msg::SubmitInput => {
                 let text = m.input.take_text();
                 if !text.is_empty() {
-                    // 把用户消息加入 CellBuffer（立即显示）
-                    m.cell_buffer.push_cell(Cell {
-                        kind: CellKind::UserMessage { text: text.clone() },
-                        state: CellState::Committed,
-                        task_id: self.task_id.clone(),
-                        turn_id: String::new(),
-                        created_at: 0,
-                    });
-                    m.status = format!("Sending: {}", &text[..text.len().min(40)]);
-                    let client = self.client.clone();
-                    // 必须 hold 住 Task，否则 perform 的 async 工作会被立即取消
-                    self._pending_task = Some(ctx.perform(async move {
-                        match client.send_message(&text).await {
-                            Ok(_) => tracing::info!("Message sent"),
-                            Err(e) => tracing::error!(error = %e, "Failed to send message"),
-                        }
-                        Msg::Tick
-                    }));
+                    m.history.push(&text);
+                    // 检查是否是斜杠命令
+                    if let Some(cmd) = parse_command(&text) {
+                        self.handle_command(cmd, ctx);
+                    } else {
+                        // 把用户消息加入 CellBuffer（立即显示）
+                        m.cell_buffer.push_cell(Cell {
+                            kind: CellKind::UserMessage { text: text.clone() },
+                            state: CellState::Committed,
+                            task_id: self.task_id.clone(),
+                            turn_id: String::new(),
+                            created_at: 0,
+                        });
+                        // 立即进入 processing，关闭 Enter，避免 TurnStarted 回来前重复提交。
+                        m.is_processing = true;
+                        m.status = format!("发送：{}", text.chars().take(40).collect::<String>());
+                        let client = self.client.clone();
+                        // 必须 hold 住 Task，否则 perform 的 async 工作会被立即取消
+                        self._pending_task = Some(ctx.perform(async move {
+                            match client.send_message(&text).await {
+                                Ok(_) => Msg::Tick,
+                                Err(error) => Msg::CommandFailed(error),
+                            }
+                        }));
+                    }
                 }
             }
 
             Msg::CtrlCPressed => {
                 if m.is_processing {
-                    m.status = "Cancelling…".into();
+                    m.status = "正在中断…".into();
                     let client = self.client.clone();
                     self._pending_task = Some(ctx.perform(async move {
                         match client.cancel().await {
-                            Ok(_) => tracing::info!("Cancel sent"),
-                            Err(e) => tracing::warn!(error = %e, "Cancel failed"),
+                            Ok(_) => Msg::Tick,
+                            Err(error) => Msg::CommandFailed(error),
                         }
-                        Msg::Tick
                     }));
                 } else {
                     ctx.exit(());
@@ -337,6 +717,11 @@ impl App for SomaTuiApp {
                 if let Err(e) = session::save_session(&self.task_id, ".", &m.cell_buffer) {
                     tracing::warn!(error = %e, "Failed to save session on quit");
                 }
+                // 保存退出摘要供 TUI 退出后显示
+                Self::save_exit_summary(
+                    &self.workspace_ctx,
+                    &m.cell_buffer,
+                );
                 // SomaClient 的 Drop 会自动关闭子进程
                 ctx.exit(());
             }
@@ -347,36 +732,166 @@ impl App for SomaTuiApp {
                 m.pending_approval = None;
 
                 if let Some(aid) = approval_id {
-                    m.status = "Approved — sending to Runtime".into();
+                    m.status = "已批准，正在继续…".into();
                     let client = self.client.clone();
-                    let _ = ctx.perform(async move {
-                        let _ = client.approve(&aid).await;
-                        Msg::Tick
-                    });
+                    // 必须保存 Task handle；eye_declare 会取消被立即丢弃的任务。
+                    self._pending_task = Some(ctx.perform(async move {
+                        match client.approve(&aid).await {
+                            Ok(_) => Msg::Tick,
+                            Err(error) => Msg::CommandFailed(error),
+                        }
+                    }));
                 } else {
-                    m.status = "Approved".into();
+                    m.status = "已批准".into();
                 }
             }
 
             Msg::DismissOverlay => {
-                // 用户拒绝/关闭 → 通知 Runtime
+                // 关闭审批覆盖层 → 通知 Runtime（如有）
                 let approval_id = m.pending_approval_id.take();
                 m.pending_approval = None;
+                // 关闭会话覆盖层
+                m.session_overlay = None;
 
                 if let Some(aid) = approval_id {
-                    m.status = "Rejected — sending to Runtime".into();
+                    m.status = "已拒绝，正在通知 Runtime…".into();
                     let client = self.client.clone();
-                    let _ = ctx.perform(async move {
-                        let _ = client.reject(&aid).await;
-                        Msg::Tick
-                    });
+                    self._pending_task = Some(ctx.perform(async move {
+                        match client.reject(&aid).await {
+                            Ok(_) => Msg::Tick,
+                            Err(error) => Msg::CommandFailed(error),
+                        }
+                    }));
                 } else {
-                    m.status = "Dismissed".into();
+                    m.status = "就绪".into();
+                }
+            }
+
+            Msg::InsertNewline => {
+                m.input.insert_newline();
+            }
+
+            Msg::HistoryUp => {
+                let current = m.input.take_text();
+                if let Some(prev) = m.history.up(&current) {
+                    m.input.set_text(&prev);
+                } else {
+                    m.input.set_text(&current);
+                }
+            }
+
+            Msg::HistoryDown => {
+                let current = m.input.take_text();
+                if let Some(next) = m.history.down() {
+                    m.input.set_text(&next);
+                } else {
+                    m.input.set_text(&current);
                 }
             }
 
             Msg::RawInput(event) => {
                 m.input.handle(&event);
+            }
+
+            Msg::CommandFailed(error) => {
+                m.is_processing = false;
+                m.active_tool_summary = None;
+                m.status = format!("请求失败：{}", error);
+                m.cell_buffer.fail_all_active();
+
+                // 检测 Runtime 断开
+                if !self.client.is_connected() && !m.runtime_disconnected {
+                    m.runtime_disconnected = true;
+                    m.status = "Runtime 意外退出。按 [r] 重启，[d] 诊断，[x] 退出".into();
+                }
+            }
+
+            Msg::SessionListLoaded(sessions) => {
+                m.is_processing = false;
+                if sessions.is_empty() {
+                    m.cell_buffer.push_cell(Cell {
+                        kind: CellKind::SystemMessage {
+                            level: "info".into(),
+                            text: "没有找到会话记录。直接输入需求开始新工作。".into(),
+                        },
+                        state: CellState::Committed,
+                        task_id: String::new(),
+                        turn_id: String::new(),
+                        created_at: 0,
+                    });
+                    m.status = "就绪".into();
+                } else {
+                    // 判断是 /resume 还是 /sessions：检查是否有 overlay
+                    let is_resume = m.session_overlay.as_ref().map_or(true, |o| o.mode == SessionOverlayMode::Resume);
+                    if is_resume {
+                        m.session_overlay = Some(SessionOverlayState {
+                            sessions: sessions.clone(),
+                            mode: SessionOverlayMode::Resume,
+                        });
+                        m.status = "选择要恢复的会话（输入编号）：".into();
+                    } else {
+                        // /sessions — 直接显示
+                        let list: Vec<String> = sessions
+                            .iter()
+                            .enumerate()
+                            .map(|(i, s)| format!("{}. {}（{}）", i + 1, s.title, s.status))
+                            .collect();
+                        m.cell_buffer.push_cell(Cell {
+                            kind: CellKind::SystemMessage {
+                                level: "info".into(),
+                                text: format!("会话列表：\n{}", list.join("\n")),
+                            },
+                            state: CellState::Committed,
+                            task_id: String::new(),
+                            turn_id: String::new(),
+                            created_at: 0,
+                        });
+                        m.status = "就绪".into();
+                    }
+                }
+            }
+
+            Msg::SessionSelected(index) => {
+                m.is_processing = false;
+                let overlay = m.session_overlay.take();
+                if let Some(ref overlay) = overlay {
+                    // 来自 overlay 选择 — 切换到选中的会话
+                    if let Some(task) = overlay.sessions.get(index) {
+                        let task_id = task.id.clone();
+                        let title = task.title.clone();
+                        self.client.switch_to_task(task_id);
+                        self.task_id = self.client.task_id().unwrap_or_else(|| "?".to_string());
+
+                        // 清除当前对话，显示已切换提示
+                        m.cell_buffer = CellBuffer::new();
+                        m.cell_buffer.push_cell(Cell {
+                            kind: CellKind::SystemMessage {
+                                level: "info".into(),
+                                text: format!("已切换到会话：{}", title),
+                            },
+                            state: CellState::Committed,
+                            task_id: self.task_id.clone(),
+                            turn_id: String::new(),
+                            created_at: 0,
+                        });
+                        m.status = format!("已切换到：{}", title);
+                    }
+                } else {
+                    // 来自 /new 的回调 — 已创建新会话
+                    self.task_id = self.client.task_id().unwrap_or_else(|| "?".to_string());
+                    m.cell_buffer = CellBuffer::new();
+                    m.cell_buffer.push_cell(Cell {
+                        kind: CellKind::SystemMessage {
+                            level: "info".into(),
+                            text: "已开始新会话。仓库中现有的未提交文件仍然保留。".into(),
+                        },
+                        state: CellState::Committed,
+                        task_id: self.task_id.clone(),
+                            turn_id: String::new(),
+                        created_at: 0,
+                    });
+                    m.status = "新会话已就绪".into();
+                }
             }
 
             Msg::Tick => {
@@ -402,14 +917,40 @@ impl App for SomaTuiApp {
                         })
                         .when(
                             model.is_processing && model.active_tool_summary.is_none(),
-                            |c| c.child(text("Thinking…")),
+                            |c| c.child(text("思考中…")),
                         )
                         .child(spinner("⏳")),
                 )
             })
             // 审批覆盖层
             .when_some(model.pending_approval.as_ref(), |c, prompt| {
-                c.child(panel(text(format!("[Approval] {}", prompt))).title("Approval Required"))
+                c.child(panel(text(format!("需要批准：{}", prompt))).title("操作审批"))
+            })
+            // Runtime 断开覆盖层
+            .when(model.runtime_disconnected, |c| {
+                c.child(
+                    panel(text(
+                        "Runtime 意外退出。\n\n\
+                         已保留当前输入和已完成的对话。\n\n\
+                         [r] 重启 Runtime\n\
+                         [d] 运行诊断\n\
+                         [x] 退出"
+                    ))
+                    .title("⚠ Runtime 断开"),
+                )
+            })
+            // 会话列表覆盖层
+            .when_some(model.session_overlay.as_ref(), |c, overlay| {
+                let items: Vec<String> = overlay
+                    .sessions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| {
+                        format!("{}. {} [{}]", i + 1, s.title, s.status)
+                    })
+                    .collect();
+                let body = format!("最近会话：\n{}\n\n输入编号切换会话，Esc 关闭", items.join("\n"));
+                c.child(panel(text(body)).title("会话切换"))
             })
             // 输入区
             .child(
@@ -417,11 +958,9 @@ impl App for SomaTuiApp {
                     text_area(&model.input)
                         .track_focus(&model.input_focus)
                         .max_height(INPUT_MAX_HEIGHT)
-                        .placeholder(
-                            "Type your message… (Enter to submit, Ctrl+C to cancel, Ctrl+D to quit)",
-                        ),
+                        .placeholder("输入消息…（Enter 发送，Shift+Enter 换行，↑↓ 历史，Ctrl+C 中断，Ctrl+D 退出）"),
                 )
-                .title("Input"),
+                .title("输入"),
             )
             // 状态行
             .child(text(&model.status).pad_left(1))
@@ -443,9 +982,34 @@ impl App for SomaTuiApp {
         // Esc: 关闭覆盖层
         km = km.on(key(KeyCode::Esc), Msg::DismissOverlay);
 
+        // Runtime 断开恢复选项：r=重启, d=诊断, x=退出
+        if self.model.runtime_disconnected {
+            km = km.on_override(key(KeyCode::Char('r')), Msg::Quit);
+            km = km.on_override(key(KeyCode::Char('x')), Msg::Quit);
+        }
+
+        // 会话列表选择：数字键 1-9
+        if let Some(ref overlay) = self.model.session_overlay {
+            let count = overlay.sessions.len().min(9);
+            for i in 1..=count {
+                let digit = char::from_digit(i as u32, 10).unwrap();
+                let msg = Msg::SessionSelected(i - 1);
+                km = km.on_override(key(KeyCode::Char(digit)), msg);
+            }
+        }
+
+        // Shift+Enter: 换行
+        km = km.on(key(KeyCode::Enter).shift(), Msg::InsertNewline);
+
         // Enter: 提交输入
-        if self.model.pending_approval.is_none() {
+        if self.model.pending_approval.is_none() && !self.model.is_processing {
             km = km.on(key(KeyCode::Enter), Msg::SubmitInput);
+        }
+
+        // ↑ / ↓: 命令历史导航（仅当不在 overlay 选择时）
+        if self.model.session_overlay.is_none() && !self.model.runtime_disconnected {
+            km = km.on(key(KeyCode::Up), Msg::HistoryUp);
+            km = km.on(key(KeyCode::Down), Msg::HistoryDown);
         }
 
         // 输入区 fallthrough：所有未绑定的键转发为 RawInput
@@ -474,88 +1038,223 @@ fn runtime_event_to_ui(envelope: RuntimeEventEnvelope) -> Option<UiEvent> {
         RuntimeEventKind::TurnCompleted => UiEventKind::TurnCompleted,
         RuntimeEventKind::TurnInterrupted => UiEventKind::TurnInterrupted,
         RuntimeEventKind::TurnFailed => {
-            let error = envelope.payload.get("error")
+            let error = envelope
+                .payload
+                .get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
             UiEventKind::TurnFailed { error }
         }
         RuntimeEventKind::AssistantDelta => {
-            let text = envelope.payload.get("text")
+            let text = envelope
+                .payload
+                .get("text")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
             let newline_count = text.chars().filter(|&c| c == '\n').count() as u32;
-            UiEventKind::StreamChunk { text, newline_count, is_final: false }
+            UiEventKind::StreamChunk {
+                text,
+                newline_count,
+                is_final: false,
+            }
         }
         RuntimeEventKind::ToolStarted => {
-            let call_id = envelope.payload.get("tool_call_id")
+            let call_id = envelope
+                .payload
+                .get("tool_call_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("").to_string();
-            let capability = envelope.payload.get("capability_id")
+                .unwrap_or("")
+                .to_string();
+            let capability = envelope
+                .payload
+                .get("capability_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("").to_string();
-            let args_display = envelope.payload.get("arguments")
-                .map(|v| v.to_string()).unwrap_or_default();
-            UiEventKind::ToolCallStarted { call_id, capability, args_display }
+                .unwrap_or("")
+                .to_string();
+            let args_display = envelope
+                .payload
+                .get("arguments")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            UiEventKind::ToolCallStarted {
+                call_id,
+                capability,
+                args_display,
+            }
         }
         RuntimeEventKind::ToolUpdated => {
-            let call_id = envelope.payload.get("tool_call_id")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let output = envelope.payload.get("output")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let truncated = envelope.payload.get("truncated")
-                .and_then(|v| v.as_bool()).unwrap_or(false);
-            UiEventKind::ToolCallOutput { call_id, output, truncated }
+            let call_id = envelope
+                .payload
+                .get("tool_call_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let output = envelope
+                .payload
+                .get("output")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let truncated = envelope
+                .payload
+                .get("truncated")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            UiEventKind::ToolCallOutput {
+                call_id,
+                output,
+                truncated,
+            }
         }
         RuntimeEventKind::ToolCompleted => {
-            let call_id = envelope.payload.get("tool_call_id")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let success = envelope.payload.get("success")
-                .and_then(|v| v.as_bool()).unwrap_or(false);
-            let exit_code = if success { 0 } else { 1 };
-            let summary = envelope.payload.get("result_summary")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let log_path = envelope.payload.get("log_path")
-                .and_then(|v| v.as_str()).map(|s| s.to_string());
-            UiEventKind::ToolCallCompleted { call_id, exit_code, summary, log_path }
+            let call_id = envelope
+                .payload
+                .get("tool_call_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let success = envelope
+                .payload
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let exit_code = envelope
+                .payload
+                .get("exit_code")
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32)
+                .unwrap_or(if success { 0 } else { 1 });
+            let summary = envelope
+                .payload
+                .get("result_summary")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let log_path = envelope
+                .payload
+                .get("log_path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            UiEventKind::ToolCallCompleted {
+                call_id,
+                exit_code,
+                summary,
+                log_path,
+            }
         }
         RuntimeEventKind::WorkStateChanged => {
-            let combo = envelope.payload.get("combo")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let stage = envelope.payload.get("stage")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let combo = envelope
+                .payload
+                .get("combo")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let stage = envelope
+                .payload
+                .get("stage")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             UiEventKind::WorkStateChanged { combo, stage }
         }
         RuntimeEventKind::ArtifactCreated => {
-            let path = envelope.payload.get("path")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let summary = envelope.payload.get("summary")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = envelope
+                .payload
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let summary = envelope
+                .payload
+                .get("summary")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             UiEventKind::ArtifactCreated { path, summary }
         }
         RuntimeEventKind::ApprovalRequested => {
-            let approval_id = envelope.payload.get("approval_id")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let prompt = envelope.payload.get("prompt")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let timeout_ms = envelope.payload.get("timeout_ms")
-                .and_then(|v| v.as_u64());
-            UiEventKind::ApprovalRequired { approval_id, prompt, timeout_ms }
+            let approval_id = envelope
+                .payload
+                .get("approval_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let prompt = envelope
+                .payload
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let timeout_ms = envelope.payload.get("timeout_ms").and_then(|v| v.as_u64());
+            UiEventKind::ApprovalRequired {
+                approval_id,
+                prompt,
+                timeout_ms,
+            }
         }
         RuntimeEventKind::DecisionRequested => {
-            let input_id = envelope.payload.get("input_id")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let prompt = envelope.payload.get("prompt")
-                .and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let default = envelope.payload.get("default")
-                .and_then(|v| v.as_str()).map(|s| s.to_string());
-            UiEventKind::UserInputRequired { input_id, prompt, default }
+            let input_id = envelope
+                .payload
+                .get("input_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let prompt = envelope
+                .payload
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let default = envelope
+                .payload
+                .get("default")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            UiEventKind::UserInputRequired {
+                input_id,
+                prompt,
+                default,
+            }
         }
         _ => return None,
     };
 
     Some(UiEvent::new(&task_id, &turn_id, seq, kind))
+}
+
+fn capability_label(capability: &str) -> &'static str {
+    match capability {
+        "file_read" => "读取文件",
+        "file_search" => "搜索代码",
+        "file_edit" => "修改文件",
+        "file_write" => "写入文件",
+        "process_run" => "执行命令",
+        "git_status" => "检查 Git 状态",
+        "git_diff" => "查看 Diff",
+        "git_log" => "读取提交记录",
+        _ => "执行工具",
+    }
+}
+
+fn capability_args_summary(capability: &str, args_display: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(args_display).ok()?;
+    let field = |name: &str| value.get(name).and_then(|v| v.as_str());
+    let summary = match capability {
+        "process_run" => field("command").map(ToOwned::to_owned),
+        "file_read" | "file_edit" | "file_write" => field("path").map(ToOwned::to_owned),
+        "file_search" => {
+            let pattern = field("pattern")?;
+            match field("path") {
+                Some(path) => Some(format!("{} · {}", pattern, path)),
+                None => Some(pattern.to_string()),
+            }
+        }
+        "git_diff" => field("path").map(ToOwned::to_owned),
+        _ => None,
+    };
+    summary.filter(|text| !text.trim().is_empty())
 }
 
 /// 截断长输出：保留 head 行 + ellipsis + tail 行
@@ -586,11 +1285,12 @@ fn truncate_output(output: &str, head: usize, tail: usize) -> String {
 /// 将一个 Cell 渲染为 eye_declare Element
 fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
     let el: eye_declare::element::AnyElement<'_> = match &cell.kind {
-        CellKind::UserMessage { text: msg } => {
-            col().child(text(format!("You: {}", msg))).any()
-        }
+        CellKind::UserMessage { text: msg } => col().child(text(format!("你：{}", msg))).any(),
 
-        CellKind::AssistantMessage { committed_text, pending_text } => {
+        CellKind::AssistantMessage {
+            committed_text,
+            pending_text,
+        } => {
             let mut parts = col();
 
             // 已提交的文本（用 markdown 渲染）
@@ -611,14 +1311,27 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
             parts.any()
         }
 
-        CellKind::ToolCall { capability, output, exit_code, summary, .. } => {
+        CellKind::ToolCall {
+            capability,
+            args_display,
+            output,
+            exit_code,
+            summary,
+            truncated,
+            ..
+        } => {
             let status = match exit_code {
                 Some(0) => "✓",
                 Some(_) => "✗",
                 None => "●",
             };
 
-            let mut parts = col().child(text(format!("{} {}", status, capability))).gap(0);
+            let mut parts = col()
+                .child(text(format!("{} {}", status, capability_label(capability))))
+                .gap(0);
+            if let Some(args) = capability_args_summary(capability, args_display) {
+                parts = parts.child(text(format!("  {}", args)));
+            }
 
             // 输出截断：head (5) + ellipsis + tail (3)
             if !output.is_empty() {
@@ -628,17 +1341,24 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
                 }
             }
 
+            if *truncated {
+                parts = parts.child(text("  …完整输出已截断"));
+            }
+
             if let Some(s) = summary {
-                parts = parts.child(text(format!("  Result: {}", s)));
+                parts = parts.child(text(format!("  {}", s)));
             }
 
             if exit_code.is_none() {
-                parts = parts.child(row().fill(text("Running…")).fixed(3, spinner("…")));
+                parts = parts.child(row().fill(text("执行中…")).fixed(3, spinner("…")));
             }
             parts.any()
         }
 
-        CellKind::Diff { diff_text, file_path } => {
+        CellKind::Diff {
+            diff_text,
+            file_path,
+        } => {
             let mut parts = col();
             if let Some(path) = file_path {
                 parts = parts.child(text(format!("Diff: {}", path)));
@@ -668,16 +1388,16 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
             col().child(text(format!("[{}] {}", combo, stage))).any()
         }
 
-        CellKind::Artifact { path, summary } => {
-            col().child(text(format!("📎 {} ({})", summary, path))).any()
-        }
+        CellKind::Artifact { path, summary } => col()
+            .child(text(format!("📎 {} ({})", summary, path)))
+            .any(),
 
-        CellKind::ApprovalRequest { prompt, .. } => {
-            col().child(panel(text(format!("[Approval] {}", prompt))).title("Approval Required")).any()
-        }
+        CellKind::ApprovalRequest { prompt, .. } => col()
+            .child(panel(text(format!("需要批准：{}", prompt))).title("操作审批"))
+            .any(),
 
         CellKind::UserInputRequest { prompt, .. } => {
-            col().child(text(format!("[Input] {}", prompt))).any()
+            col().child(text(format!("需要输入：{}", prompt))).any()
         }
     };
     el
@@ -698,7 +1418,7 @@ mod tests {
         assert!(!model.is_processing);
         assert!(model.active_tool_summary.is_none());
         assert!(model.pending_approval.is_none());
-        assert!(model.status.contains("ready"));
+        assert!(model.status.contains("就绪"));
     }
 
     #[test]
@@ -706,7 +1426,7 @@ mod tests {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(make_event(UiEventKind::TurnStarted));
         assert!(model.is_processing);
-        assert!(model.status.contains("started"));
+        assert!(model.status.contains("正在处理"));
     }
 
     #[test]
@@ -717,7 +1437,7 @@ mod tests {
 
         model.apply_ui_event(make_event(UiEventKind::TurnCompleted));
         assert!(!model.is_processing);
-        assert!(model.status.contains("Ready"));
+        assert!(model.status.contains("就绪"));
     }
 
     #[test]
@@ -725,18 +1445,22 @@ mod tests {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(make_event(UiEventKind::TurnInterrupted));
         assert!(!model.is_processing);
-        assert!(model.status.contains("Interrupted"));
+        assert!(model.status.contains("已中断"));
     }
 
     #[test]
     fn test_turn_failed_resets_and_shows_error() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
-            UiEventKind::TurnFailed { error: "timeout".into() },
+            "t1",
+            "t1-1",
+            0,
+            UiEventKind::TurnFailed {
+                error: "timeout".into(),
+            },
         ));
         assert!(!model.is_processing);
-        assert!(model.status.contains("Failed"));
+        assert!(model.status.contains("失败"));
         assert!(model.status.contains("timeout"));
     }
 
@@ -744,7 +1468,9 @@ mod tests {
     fn test_tool_call_start_sets_active_tool() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::ToolCallStarted {
                 call_id: "call-1".into(),
                 capability: "file_read".into(),
@@ -752,14 +1478,20 @@ mod tests {
             },
         ));
         assert!(model.active_tool_summary.is_some());
-        assert!(model.active_tool_summary.as_deref().unwrap().contains("file_read"));
+        assert!(model
+            .active_tool_summary
+            .as_deref()
+            .unwrap()
+            .contains("读取文件"));
     }
 
     #[test]
     fn test_tool_call_completed_clears_active_tool() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::ToolCallStarted {
                 call_id: "call-1".into(),
                 capability: "file_read".into(),
@@ -767,7 +1499,9 @@ mod tests {
             },
         ));
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 1,
+            "t1",
+            "t1-1",
+            1,
             UiEventKind::ToolCallCompleted {
                 call_id: "call-1".into(),
                 exit_code: 0,
@@ -783,7 +1517,9 @@ mod tests {
     fn test_tool_call_failed_shows_error_icon() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::ToolCallCompleted {
                 call_id: "fail-1".into(),
                 exit_code: 1,
@@ -798,7 +1534,9 @@ mod tests {
     fn test_approval_required_sets_pending() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::ApprovalRequired {
                 approval_id: "apr-1".into(),
                 prompt: "Allow file write?".into(),
@@ -813,7 +1551,9 @@ mod tests {
     fn test_system_message_shows_level_and_text() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::SystemMessage {
                 level: "error".into(),
                 text: "connection refused".into(),
@@ -827,21 +1567,25 @@ mod tests {
     fn test_user_input_required_sets_status() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::UserInputRequired {
                 input_id: "in-1".into(),
                 prompt: "Enter path:".into(),
                 default: None,
             },
         ));
-        assert!(model.status.contains("Input required"));
+        assert!(model.status.contains("需要输入"));
     }
 
     #[test]
     fn test_work_state_changed() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::WorkStateChanged {
                 combo: "investigate".into(),
                 stage: "Phase 2".into(),
@@ -855,13 +1599,15 @@ mod tests {
     fn test_artifact_created() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::ArtifactCreated {
                 path: "/tmp/result.txt".into(),
                 summary: "analysis result".into(),
             },
         ));
-        assert!(model.status.contains("Artifact"));
+        assert!(model.status.contains("产物"));
         assert!(model.status.contains("analysis result"));
     }
 
@@ -869,14 +1615,16 @@ mod tests {
     fn test_stream_chunk_final_updates_status() {
         let mut model = SomaTuiModel::new();
         model.apply_ui_event(UiEvent::new(
-            "t1", "t1-1", 0,
+            "t1",
+            "t1-1",
+            0,
             UiEventKind::StreamChunk {
                 text: "hello\n".into(),
                 newline_count: 1,
                 is_final: true,
             },
         ));
-        assert!(model.status.contains("Stream complete"));
+        assert!(model.status.contains("流式输出完成"));
     }
 
     #[test]
@@ -926,7 +1674,7 @@ mod tests {
         // 6 行，head=3, tail=2: 3+2=5 < 6 → 需要截断
         let out = truncate_output("1\n2\n3\n4\n5\n6", 3, 3);
         assert_eq!(out.lines().count(), 6); // 3 head + 0 tail + 3... wait
-        // 3+3=6 ≤ 6 → 不需要截断
+                                            // 3+3=6 ≤ 6 → 不需要截断
         assert_eq!(out, "1\n2\n3\n4\n5\n6");
     }
 
@@ -938,5 +1686,38 @@ mod tests {
         assert_eq!(lines[1], "b");
         assert!(lines[2].contains("omitted"));
         assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn test_tool_boundary_creates_separate_assistant_cells() {
+        let mut model = SomaTuiModel::new();
+        model.apply_ui_event(make_event(UiEventKind::TurnStarted));
+        model.apply_ui_event(make_event(UiEventKind::StreamChunk {
+            text: "我先检查。".into(),
+            newline_count: 0,
+            is_final: false,
+        }));
+        model.apply_ui_event(make_event(UiEventKind::ToolCallStarted {
+            call_id: "call-1".into(),
+            capability: "git_status".into(),
+            args_display: "{}".into(),
+        }));
+        model.apply_ui_event(make_event(UiEventKind::ToolCallCompleted {
+            call_id: "call-1".into(),
+            exit_code: 0,
+            summary: "工作区干净".into(),
+            log_path: None,
+        }));
+        model.apply_ui_event(make_event(UiEventKind::StreamChunk {
+            text: "工作区目前没有改动。".into(),
+            newline_count: 0,
+            is_final: false,
+        }));
+
+        let cells = model.cell_buffer.cells();
+        assert_eq!(cells.len(), 3);
+        assert!(matches!(cells[0].kind, CellKind::AssistantMessage { .. }));
+        assert!(matches!(cells[1].kind, CellKind::ToolCall { .. }));
+        assert!(matches!(cells[2].kind, CellKind::AssistantMessage { .. }));
     }
 }
