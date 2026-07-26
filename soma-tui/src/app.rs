@@ -42,6 +42,13 @@ enum Command {
     New,
     Resume,
     Sessions,
+    Status,
+    Summary,
+    Diff,
+    Artifacts,
+    Compact,
+    Review,
+    Qa,
     Help,
     Exit,
 }
@@ -56,6 +63,13 @@ fn parse_command(text: &str) -> Option<Command> {
         "/new" | "/n" => Some(Command::New),
         "/resume" | "/r" => Some(Command::Resume),
         "/sessions" | "/s" => Some(Command::Sessions),
+        "/status" | "/st" => Some(Command::Status),
+        "/summary" | "/su" => Some(Command::Summary),
+        "/diff" | "/d" => Some(Command::Diff),
+        "/artifacts" | "/a" => Some(Command::Artifacts),
+        "/compact" | "/c" => Some(Command::Compact),
+        "/review" => Some(Command::Review),
+        "/qa" => Some(Command::Qa),
         "/help" | "/h" | "/?" => Some(Command::Help),
         "/exit" | "/quit" | "/q" => Some(Command::Exit),
         _ => None,
@@ -112,6 +126,10 @@ pub enum Msg {
     HistoryDown,
     /// 会话列表已加载
     SessionListLoaded(Vec<soma_protocol::params::TaskSummary>),
+    /// 任务详情已加载（用于 /status）
+    TaskInfoLoaded(Option<soma_protocol::params::TaskGetResult>),
+    /// Git diff 结果（用于 /diff）
+    DiffResult(String),
     /// 用户选择了会话列表中的第 N 项（0-indexed）
     SessionSelected(usize),
 }
@@ -563,14 +581,134 @@ impl SomaTuiApp {
                 m.status = "正在获取会话列表…".into();
             }
 
+            Command::Status => {
+                // /status — 显示当前会话状态
+                let client = self.client.clone();
+                let task_id = self.task_id.clone();
+                self._pending_task = Some(ctx.perform(async move {
+                    match client.task_get(&task_id).await {
+                        Ok(info) => Msg::TaskInfoLoaded(Some(info)),
+                        Err(e) => Msg::CommandFailed(format!("获取状态失败: {}", e)),
+                    }
+                }));
+                m.status = "正在获取状态…".into();
+            }
+
+            Command::Summary => {
+                // /summary — 显示工作摘要（基于 git 状态 + 当前会话）
+                let changed = self.workspace_ctx.changed_files.len();
+                let project = self.workspace_ctx.name.clone();
+                let branch = self.workspace_ctx.branch.clone();
+                let cell_count = m.cell_buffer.cells().len();
+                let summary = format!(
+                    "工作摘要\n\
+                     ────────────────\n\
+                     项目: {}\n\
+                     分支: {}\n\
+                     对话消息: {} 条\n\
+                     未提交文件: {} 个\n\
+                     ────────────────\n\
+                     直接输入需求继续工作。",
+                    project,
+                    branch.as_deref().unwrap_or("(无)"),
+                    cell_count,
+                    changed,
+                );
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: summary,
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
+            }
+
+            Command::Diff => {
+                // /diff — 读取真实 Git diff
+                let cwd = self.workspace_ctx.root.clone();
+                self._pending_task = Some(ctx.perform(async move {
+                    let diff = run_git_diff(&cwd).await;
+                    Msg::DiffResult(diff)
+                }));
+                m.status = "正在获取 diff…".into();
+            }
+
+            Command::Artifacts => {
+                // /artifacts — 显示当前任务的产物
+                let client = self.client.clone();
+                let task_id = self.task_id.clone();
+                self._pending_task = Some(ctx.perform(async move {
+                    match client.task_get(&task_id).await {
+                        Ok(info) => Msg::TaskInfoLoaded(Some(info)),
+                        Err(e) => Msg::CommandFailed(format!("获取产物失败: {}", e)),
+                    }
+                }));
+                m.status = "正在获取产物…".into();
+            }
+
+            Command::Compact => {
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: "紧凑模式提示：当前上下文已压缩。\n\
+                               已保留用户确认的要求、当前目标、已完成事实、\n\
+                               未解决问题、文件改动、最近验证、权限决策。".into(),
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
+            }
+
+            Command::Review => {
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: "能力未就绪：/review Combo 尚未集成。\n直接在 TUI 中使用自然语言描述需要审查的改动。".into(),
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
+            }
+
+            Command::Qa => {
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: "能力未就绪：/qa Combo 尚未集成。\n直接在 TUI 中使用自然语言描述需要检查的内容。".into(),
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
+            }
+
             Command::Help => {
                 let help_text = vec![
                     "可用命令:".into(),
                     "  /new, /n        创建新会话",
                     "  /resume, /r     恢复最近会话",
                     "  /sessions, /s   列出所有会话",
+                    "  /status, /st    显示当前会话状态",
+                    "  /summary, /su   显示工作摘要",
+                    "  /diff, /d       显示 Git diff",
+                    "  /artifacts, /a  显示产物",
+                    "  /compact, /c    压缩上下文",
+                    "  /review         审查代码（未就绪）",
+                    "  /qa             质量检查（未就绪）",
                     "  /help, /h       显示此帮助",
-                    "  /exit, /quit, /q  退出程序",
+                    "  /exit, /q       退出程序",
                     "",
                     "直接输入需求即可开始工作。",
                 ]
@@ -593,6 +731,35 @@ impl SomaTuiApp {
                 ctx.exit(());
             }
         }
+    }
+}
+
+/// 异步执行 git diff 并返回结果
+async fn run_git_diff(cwd: &std::path::Path) -> String {
+    let result = tokio::process::Command::new("git")
+        .args(["diff", "--stat"])
+        .current_dir(cwd)
+        .output()
+        .await;
+    let stat = match result {
+        Ok(ref out) if out.status.success() => String::from_utf8_lossy(&out.stdout).to_string(),
+        _ => String::new(),
+    };
+
+    let result = tokio::process::Command::new("git")
+        .args(["diff"])
+        .current_dir(cwd)
+        .output()
+        .await;
+    let full = match result {
+        Ok(ref out) if out.status.success() => String::from_utf8_lossy(&out.stdout).to_string(),
+        _ => "(无法获取 diff，可能不在 git 仓库中)".to_string(),
+    };
+
+    if stat.is_empty() && full.is_empty() {
+        "工作区干净，无未提交改动。".to_string()
+    } else {
+        format!("{}\n{}", stat, full)
     }
 }
 
@@ -880,6 +1047,77 @@ impl App for SomaTuiApp {
                     });
                     m.status = "新会话已就绪".into();
                 }
+            }
+
+            Msg::TaskInfoLoaded(info) => {
+                m.is_processing = false;
+                match info {
+                    Some(task) => {
+                        let mut lines = vec![
+                            format!("当前会话: {}", task.title),
+                            format!("状态: {}", task.status),
+                            format!("创建: {}", task.created_at),
+                            format!("更新: {}", task.updated_at),
+                            String::new(),
+                            format!("仓库: {} 个未提交文件", self.workspace_ctx.changed_files.len()),
+                        ];
+                        if let Some(ref branch) = self.workspace_ctx.branch {
+                            lines.push(format!("分支: {}", branch));
+                        }
+                        if let Some(combo) = task.work_state.get("current_combo").and_then(|v| v.as_str()) {
+                            lines.push(String::new());
+                            lines.push(format!("当前工作流: {}", combo));
+                        }
+                        if !task.artifacts.is_empty() {
+                            lines.push(String::new());
+                            lines.push(format!("产物: {} 个", task.artifacts.len()));
+                        }
+                        m.cell_buffer.push_cell(Cell {
+                            kind: CellKind::SystemMessage {
+                                level: "info".into(),
+                                text: lines.join("\n"),
+                            },
+                            state: CellState::Committed,
+                            task_id: String::new(),
+                            turn_id: String::new(),
+                            created_at: 0,
+                        });
+                        m.status = "就绪".into();
+                    }
+                    None => {
+                        m.cell_buffer.push_cell(Cell {
+                            kind: CellKind::SystemMessage {
+                                level: "info".into(),
+                                text: "没有活跃会话。直接输入需求开始新工作。".into(),
+                            },
+                            state: CellState::Committed,
+                            task_id: String::new(),
+                            turn_id: String::new(),
+                            created_at: 0,
+                        });
+                        m.status = "就绪".into();
+                    }
+                }
+            }
+
+            Msg::DiffResult(diff) => {
+                m.is_processing = false;
+                let display = if diff.len() > 2000 {
+                    format!("{}…\n\n（diff 过长，已截断前 2000 字符）", &diff[..2000])
+                } else {
+                    diff
+                };
+                m.cell_buffer.push_cell(Cell {
+                    kind: CellKind::SystemMessage {
+                        level: "info".into(),
+                        text: format!("Git Diff：\n{}", display),
+                    },
+                    state: CellState::Committed,
+                    task_id: String::new(),
+                    turn_id: String::new(),
+                    created_at: 0,
+                });
+                m.status = "就绪".into();
             }
 
             Msg::Tick => {
