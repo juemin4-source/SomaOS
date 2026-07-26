@@ -1366,6 +1366,7 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
             exit_code,
             summary,
             truncated,
+            log_path,
             ..
         } => {
             let status_mark = match exit_code {
@@ -1393,16 +1394,29 @@ fn render_cell_element(cell: &Cell) -> eye_declare::element::AnyElement<'_> {
                 parts = parts.child(text(format!("  {}", args)));
             }
 
-            // 输出截断：head (5) + ellipsis + tail (3)
+            // 输出截断：失败时展示更多尾部上下文（错误行），成功时仅摘要
+            let is_error = exit_code.map_or(false, |c| c != 0);
+            let (head, tail) = if is_error {
+                (5, 8) // 失败时展示更多尾部
+            } else {
+                (5, 3) // 成功时只展示头部和少量尾部
+            };
+
             if !output.is_empty() {
-                let truncated = truncate_output(output, 5, 3);
-                for line in truncated.lines() {
+                let display = truncate_output(output, head, tail);
+                for line in display.lines() {
                     parts = parts.child(text(format!("  {}", line)));
                 }
             }
 
+            // 截断标记 + 日志文件提示
             if *truncated {
                 parts = parts.child(text("  …完整输出已截断"));
+            }
+            if let Some(log) = log_path {
+                if *truncated || is_error {
+                    parts = parts.child(text(format!("  📄 完整输出: {}", log)));
+                }
             }
 
             // 结果摘要行
