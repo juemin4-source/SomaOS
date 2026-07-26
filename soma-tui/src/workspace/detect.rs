@@ -150,7 +150,7 @@ fn run_git(cwd: &Path, args: &[&str], timeout: Duration) -> Option<String> {
 }
 
 /// 解析 git 可执行文件路径
-fn resolve_git_exe() -> String {
+pub(crate) fn resolve_git_exe() -> String {
     // 1. 环境变量优先
     if let Ok(path) = std::env::var("SOMA_GIT_PATH") {
         if !path.is_empty() {

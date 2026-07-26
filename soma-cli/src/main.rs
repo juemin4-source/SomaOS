@@ -98,42 +98,40 @@ enum CapabilityCommand {
     List,
 }
 
+impl Commands {
+    /// 是否需要启动 Runtime 子进程
+    fn requires_runtime(&self) -> bool {
+        !matches!(
+            self,
+            Commands::Doctor | Commands::Config | Commands::Combo { .. } | Commands::Capability { .. }
+        )
+    }
+}
+
 fn main() -> Result<(), i32> {
     let cli = Cli::parse();
 
     match &cli.commands {
         None => {
-            // 无子命令 → 启动交互式 TUI
             start_tui()?;
             Ok(())
         }
         Some(cmd) => {
-            // 有子命令 → 启动 tokio runtime 执行（管理命令不需要 runtime）
-            if is_management_command(cmd) {
-                return run_management(cmd);
-            }
-            let rt = tokio::runtime::Runtime::new().map_err(|e| {
-                eprintln!("Runtime error: {}", e);
-                1
-            })?;
-            let result = rt.block_on(dispatch_command(cmd));
-            if let Err(code) = result {
-                std::process::exit(code);
+            if cmd.requires_runtime() {
+                let rt = tokio::runtime::Runtime::new().map_err(|e| {
+                    eprintln!("Runtime error: {}", e);
+                    1
+                })?;
+                let result = rt.block_on(dispatch_command(cmd));
+                if let Err(code) = result {
+                    std::process::exit(code);
+                }
+            } else {
+                run_management(cmd)?;
             }
             Ok(())
         }
     }
-}
-
-/// 判断是否是纯本地管理命令（不需要 Runtime 子进程）
-fn is_management_command(cmd: &Commands) -> bool {
-    matches!(
-        cmd,
-        Commands::Doctor
-            | Commands::Config
-            | Commands::Combo { .. }
-            | Commands::Capability { .. }
-    )
 }
 
 fn start_tui() -> Result<(), i32> {

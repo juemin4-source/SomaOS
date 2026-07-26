@@ -6,6 +6,7 @@
 use soma_ui_protocol::{Cell, CellBuffer, CellKind, CellState, UiEvent, UiEventKind};
 
 use crate::session;
+use crate::workspace::detect::resolve_git_exe;
 use crate::workspace::WorkspaceContext;
 use soma_client::SomaClient;
 use soma_protocol::events::{RuntimeEventEnvelope, RuntimeEventKind};
@@ -385,7 +386,7 @@ impl SomaTuiModel {
             UiEventKind::TurnFailed { error } => {
                 self.is_processing = false;
                 self.active_tool_summary = None;
-                self.status = format!("失败：{}", error);
+                self.status = format_user_error(&format!("失败：{}", error));
                 self.cell_buffer.fail_all_active();
             }
 
@@ -736,7 +737,8 @@ impl SomaTuiApp {
 
 /// 异步执行 git diff 并返回结果
 async fn run_git_diff(cwd: &std::path::Path) -> String {
-    let result = tokio::process::Command::new("git")
+    let git_exe = resolve_git_exe();
+    let result = tokio::process::Command::new(&git_exe)
         .args(["diff", "--stat"])
         .current_dir(cwd)
         .output()
@@ -746,7 +748,7 @@ async fn run_git_diff(cwd: &std::path::Path) -> String {
         _ => String::new(),
     };
 
-    let result = tokio::process::Command::new("git")
+    let result = tokio::process::Command::new(&git_exe)
         .args(["diff"])
         .current_dir(cwd)
         .output()
@@ -1444,10 +1446,18 @@ fn runtime_event_to_ui(envelope: RuntimeEventEnvelope) -> Option<UiEvent> {
         }
         _ => {
             let kind_name = format!("{:?}", envelope.kind);
-            tracing::warn!(event = %kind_name, "Unknown RuntimeEventKind — possible protocol mismatch");
+            tracing::error!(
+                event = %kind_name,
+                task_id = %envelope.task_id,
+                "收到未知 RuntimeEventKind — 协议版本可能不匹配"
+            );
             UiEventKind::SystemMessage {
-                level: "warn".into(),
-                text: format!("未知 Runtime 事件: {}", kind_name),
+                level: "error".into(),
+                text: format!(
+                    "⚠ 未知事件类型: {} — 可能存在协议不匹配\n\
+                     请更新 soma 版本以兼容最新协议。",
+                    kind_name
+                ),
             }
         }
     };
